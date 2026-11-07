@@ -176,6 +176,35 @@ details.extras>summary{cursor:pointer;color:var(--navy2);font-size:13.5px;font-w
 .sugitem.feito{opacity:.55}
 textarea.code{width:100%;min-height:360px;font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--ln);border-radius:10px;padding:10px;background:#0f1724;color:#e6edf6;white-space:pre;overflow:auto}
 .nav a{font-size:10.5px}
+.tools{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.tools a{display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:10px 4px;text-decoration:none;color:var(--navy);font-size:22px;box-shadow:var(--sh)}
+.tools a span{font-size:11px;font-weight:650;text-align:center;line-height:1.2}
+.selo{background:var(--okbg);color:var(--ok);border:1px solid #b7e1c6;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.prog{height:10px;background:#e3e8f0;border-radius:99px;overflow:hidden}.prog i{display:block;height:100%;background:var(--ok)}
+.calcres{position:sticky;top:calc(var(--toph,60px) + 6px);z-index:5}
+.calcres.ok{border-color:#9fd5b3;background:var(--okbg)}.calcres.no{border-color:#f4c5c0;background:var(--redbg)}
+.calcn{font-size:28px;font-weight:800;color:var(--navy);margin:2px 0 6px}
+.revrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #eef1f5}
+.av.okb{background:var(--okbg);color:var(--ok);border:1px solid #b7e1c6}
+/* ---------- tema escuro (serviço noturno) ---------- */
+[data-tema=escuro]{--bg:#0a111d;--card:#121c2b;--tx:#e4ebf5;--mut:#93a3b8;--ln:#26354b;--okbg:#0f2e1f;--warnbg:#33260b;--redbg:#3a1414;--navy:#cfe0ff;--navy2:#8fb4ff;--sh:none;color-scheme:dark}
+[data-tema=escuro] .top{background:#060d18}
+[data-tema=escuro] .top h1,[data-tema=escuro] .top .back{color:#e4ebf5}
+[data-tema=escuro] .nav{background:#0d1626;border-color:#26354b}
+[data-tema=escuro] .f input,[data-tema=escuro] .f select,[data-tema=escuro] .f textarea,[data-tema=escuro] .search input,[data-tema=escuro] .chk,[data-tema=escuro] .out,[data-tema=escuro] .envrow,[data-tema=escuro] .mrow select,[data-tema=escuro] .mrow input,[data-tema=escuro] .tlit input,[data-tema=escuro] .dlgbox textarea,[data-tema=escuro] .dlgbox input{background:#0e1726!important;color:#e4ebf5;border-color:#26354b}
+[data-tema=escuro] .chips button,[data-tema=escuro] .estilos button,[data-tema=escuro] .tlbtn,[data-tema=escuro] .qops button,[data-tema=escuro] .addmods button,[data-tema=escuro] .frx{background:#0e1726;color:#e4ebf5;border-color:#2c3d55}
+[data-tema=escuro] .chips button.on,[data-tema=escuro] .estilos button.on{background:#8fb4ff;color:#06101f;border-color:#8fb4ff}
+[data-tema=escuro] .sug button{background:#14233a;color:#bcd3ff;border-color:#2c3d55}
+[data-tema=escuro] .tabs{background:#0e1726}[data-tema=escuro] .tabs button.on{background:#1b2a40;color:#e4ebf5}
+[data-tema=escuro] .btn{background:#1b2a40;color:#e4ebf5}[data-tema=escuro] .btn.pri{background:#8fb4ff;color:#06101f}[data-tema=escuro] .btn.gold{background:var(--gold);color:#0b2545}[data-tema=escuro] .btn.red{background:#3a1414;color:#ff9c94}
+[data-tema=escuro] .tcard .ic,[data-tema=escuro] .nat{background:#1b2a40}
+[data-tema=escuro] .dlgbox,[data-tema=escuro] .lockbox{background:#121c2b;color:#e4ebf5}
+[data-tema=escuro] .alerta{color:#ffc9c4;border-color:#5a2420}[data-tema=escuro] .aviso2,[data-tema=escuro] .av.warn{color:#f5d08a;border-color:#5a4513}[data-tema=escuro] .av.red{color:#ffc9c4;border-color:#5a2420}
+[data-tema=escuro] .out mark{background:#4a3710;color:#ffd27a}
+[data-tema=escuro] .cl li,[data-tema=escuro] .natlist div,[data-tema=escuro] .revrow,[data-tema=escuro] .sugitem{border-color:#1f2c40}
+[data-tema=escuro] .turno{background:#1b2a40}
+[data-tema=escuro] .prog{background:#1b2a40}
+[data-tema=escuro] .flash.virado{background:#16233a;border-color:#2c3d55}
 .aviso{font-size:12.5px;color:var(--mut);text-align:center;margin:18px 6px 0}
 @media (min-width:700px){.grid{grid-template-columns:1fr 1fr}}
 </style>
@@ -188,8 +217,9 @@ textarea.code{width:100%;min-height:360px;font:12.5px/1.45 ui-monospace,Menlo,Co
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js?v=3.0.1"></script>
-<script src="municipios.js?v=3.0.1"></script>
-<script src="app.js?v=3.0.1"></script>
+<script src="firebase-config.js?v=4.0.0"></script>
+<script src="municipios.js?v=4.0.0"></script>
+<script src="legis.js?v=4.0.0"></script>
+<script src="app.js?v=4.0.0"></script>
 </body>
 </html>

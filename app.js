@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 
-const VERSAO = '3.0.1';
+const VERSAO = '4.0.0';
 const $ = s => document.querySelector(s);
 const app = $('#app'), top = $('#top');
 const PH_A = '⟦', PH_B = '⟧';
@@ -13,7 +13,7 @@ const ARQS_CONTEUDO = ['base', 'ocorr', 'patrimonio', 'geral', 'transito', 'cust
 const NOMES_CAT = { ocorr: 'Ocorrências (Série 100)', patrimonio: 'Furto e roubo', geral: 'Outros crimes (CP/leis)', transito: 'Trânsito', custodia: 'Cadeia de custódia', crise: 'Primeira intervenção (Série 200)', gestao: 'Despacho' };
 const PERMS_PADRAO = { cats: ['ocorr', 'patrimonio', 'geral', 'transito', 'custodia', 'crise', 'gestao'], gerar: true, dicas: true, admin: false };
 
-let CATEGORIAS = [], MODULOS = {}, TIPOS = [];
+let CATEGORIAS = [], MODULOS = {}, TIPOS = [], SIMULADOS = [], EXTRAS = { frasesUnidade: [], novidades: null, revisoes: {} };
 const GRADUACOES = [
   ['Praças', [['Soldado 3ª Classe', 'Sd. 3ª Cl.'], ['Soldado 2ª Classe', 'Sd. 2ª Cl.'], ['Soldado 1ª Classe', 'Sd. 1ª Cl.'], ['Cabo', 'Cb.'], ['3º Sargento', '3º Sgt.'], ['2º Sargento', '2º Sgt.'], ['1º Sargento', '1º Sgt.'], ['Subtenente', 'Subten.']]],
   ['Praças especiais', [['Cadete', 'Cad.'], ['Aspirante-a-Oficial', 'Asp. Of.']]],
@@ -58,10 +58,10 @@ function hoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.ge
 function agora() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function fmtData(iso) { if (!iso) return ''; const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; }
 function fmtQuando(ts) { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
-function confirmar(msg, ok = 'Confirmar', html = false) {
+function confirmar(msg, ok = 'Confirmar', html = false, soOk = false) {
   return new Promise(res => {
     const w = document.createElement('div'); w.className = 'dlg';
-    w.innerHTML = `<div class="dlgbox" role="dialog" aria-modal="true"><div class="dlgmsg">${html ? msg : esc(msg)}</div><div class="actions"><button class="btn" data-r="0">Cancelar</button><button class="btn pri" data-r="1">${esc(ok)}</button></div></div>`;
+    w.innerHTML = `<div class="dlgbox" role="dialog" aria-modal="true"><div class="dlgmsg">${html ? msg : esc(msg)}</div><div class="actions">${soOk ? '' : '<button class="btn" data-r="0">Cancelar</button>'}<button class="btn pri" data-r="1">${esc(ok)}</button></div></div>`;
     w.onclick = e => { const r = e.target.dataset && e.target.dataset.r; if (r === undefined && e.target !== w) return; confirmar.valores = Object.fromEntries([...w.querySelectorAll('input,select,textarea')].filter(i => i.id).map(i => [i.id, i.type === 'checkbox' ? i.checked : i.value])); w.remove(); res(r === '1'); };
     document.body.appendChild(w); w.querySelector('[data-r="1"]').focus();
   });
@@ -71,7 +71,7 @@ const ehAdmin = () => !!(perfil && ((perfil.perms && perfil.perms.admin) || (usu
 
 /* ------------------------- conteúdo (protegido) ------------------------- */
 function montarConteudo(fontes) {
-  const code = 'var CATEGORIAS=[],MODULOS={},TIPOS=[];\n' + fontes.map(f => `/* ${f.id} */\n${f.js}`).join('\n;\n') + '\n;return {CATEGORIAS:CATEGORIAS,MODULOS:MODULOS,TIPOS:TIPOS};';
+  const code = 'var CATEGORIAS=[],MODULOS={},TIPOS=[],SIMULADOS=[];\n' + fontes.map(f => `/* ${f.id} */\n${f.js}`).join('\n;\n') + '\n;return {CATEGORIAS:CATEGORIAS,MODULOS:MODULOS,TIPOS:TIPOS,SIMULADOS:SIMULADOS};';
   // eslint-disable-next-line no-new-func
   return new Function(code)();
 }
@@ -81,6 +81,7 @@ function aplicarConteudo(fontes) {
   CATEGORIAS = c.CATEGORIAS.filter(x => cats.has(x.id) || ehAdmin());
   MODULOS = c.MODULOS;
   TIPOS = c.TIPOS.filter(t => cats.has(t.cat) || ehAdmin());
+  SIMULADOS = (c.SIMULADOS || []).filter(x => TIPOS.find(t => t.id === x.tipo));
 }
 async function carregarConteudo(forcar) {
   const ids = ['base', ...(ehAdmin() ? ARQS_CONTEUDO.slice(1) : (perfil.perms.cats || []))];
@@ -92,9 +93,9 @@ async function carregarConteudo(forcar) {
     for (const id of ids) {
       try {
         const snap = await db.collection('conteudo').doc(id).get({ source: forcar ? 'server' : 'default' });
-        if (snap.exists) { const x = snap.data(); fontes.push({ id, js: x.js }); cache[id] = { js: x.js, versao: x.versao || 0 }; }
+        if (snap.exists) { const x = snap.data(); fontes.push({ id, js: x.js }); cache[id] = { js: x.js, versao: x.versao || 0 }; if (id === 'base') { EXTRAS = { frasesUnidade: x.frasesUnidade || [], novidades: x.novidades || null, revisoes: x.revisoes || {} }; cache._extras = EXTRAS; } }
         else delete cache[id];
-      } catch (e) { if (cache[id]) fontes.push({ id, js: cache[id].js }); }
+      } catch (e) { if (cache[id]) fontes.push({ id, js: cache[id].js }); if (id === 'base' && cache._extras) EXTRAS = cache._extras; }
     }
     LS.set(uidKey('conteudo'), cache);
   }
@@ -289,6 +290,19 @@ function sugestoes(c, obj) {
   return [...new Set(lista)];
 }
 const temVoz = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+// Autopreenchimento: lembra valores já usados em campos não pessoais (nunca nomes de envolvidos)
+const SEM_HIST = new Set(['cep', 'numero', 'obs', 'data', 'hora', 'horaChegada', 'hSaida', 'hDP', 'hFim', 'rg', 'iccid', 'lacre', 'lacreArma', 'lacreMun', 'serie', 'placa', 'mpuNum', 'processo', 'mandado', 'coords']);
+const hist = () => LS.get(uidKey('hist'), {});
+function lembrar(id, v, campo) {
+  v = String(v || '').trim();
+  if (!v || v.length < 2 || v.length > 120 || SEM_HIST.has(id) || (campo && campo.p)) return;
+  const h = hist(); h[id] = [v, ...(h[id] || []).filter(x => x !== v)].slice(0, 15); LS.set(uidKey('hist'), h);
+}
+function opcoesAuto(c, obj) {
+  const base = [...(hist()[c.id] || []), ...sugestoes(c, obj)];
+  if (c.id === 'municipio') return [];
+  return [...new Set(base)].slice(0, 20);
+}
 function campoHTML(c, obj, scope) {
   const v = obj[c.id];
   const k = `data-s="${scope}" data-k="${c.id}"`;
@@ -308,7 +322,9 @@ function campoHTML(c, obj, scope) {
   if (c.t === 'area') inp = `<textarea ${k} placeholder="${esc(c.ph || (temVoz ? 'Digite ou toque em 🎤 para ditar' : ''))}">${esc(v || '')}</textarea>`;
   else {
     const ty = { num: 'number', date: 'date', time: 'time' }[c.t] || 'text';
-    inp = `<input type="${ty}" ${ty === 'number' ? 'inputmode="decimal"' : ''} ${k} value="${esc(v || '')}" placeholder="${esc(c.ph || '')}">`;
+    const ops = ty === 'text' ? opcoesAuto(c, obj) : [];
+    const dl = ops.length ? `list="dl-${scope}-${c.id}"` : '';
+    inp = `<input type="${ty}" ${ty === 'number' ? 'inputmode="decimal"' : ''} ${k} ${dl} autocomplete="off" value="${esc(v || '')}" placeholder="${esc(c.ph || '')}">${ops.length ? `<datalist id="dl-${scope}-${c.id}">${ops.map(o => `<option value="${esc(o)}">`).join('')}</datalist>` : ''}`;
   }
   const ag = c.agora ? `<button type="button" class="mini" data-agora="${c.id}" data-ms="${scope}">agora</button>` : '';
   const sug = !filled(v) && c.t !== 'date' && c.t !== 'time' ? sugestoes(c, obj) : [];
@@ -332,7 +348,7 @@ function assinaturaVisivel() {
   return s.join('|');
 }
 function enderecoHTML(d) {
-  const f = (id, l, ph, extra = '') => `<div class="f"><label>${l}</label><input type="text" data-s="d" data-k="${id}" value="${esc(d[id] || '')}" placeholder="${esc(ph)}" ${extra}></div>`;
+  const f = (id, l, ph, extra = '') => { const ops = ['logradouro', 'bairro', 'referencia'].includes(id) ? (hist()[id] || []) : []; return `<div class="f"><label>${l}</label><input type="text" data-s="d" data-k="${id}" value="${esc(d[id] || '')}" placeholder="${esc(ph)}" ${ops.length ? `list="dl-end-${id}"` : ''} autocomplete="off" ${extra}>${ops.length ? `<datalist id="dl-end-${id}">${ops.map(o => `<option value="${esc(o)}">`).join('')}</datalist>` : ''}</div>`; };
   return `<div class="endbox"><div class="row-cep"><div class="f"><label>CEP</label><input type="text" inputmode="numeric" maxlength="9" data-s="d" data-k="cep" value="${esc(d.cep || '')}" placeholder="00000-000"></div><button type="button" class="btn sm" id="buscaCep">Buscar CEP</button><button type="button" class="btn sm gold" id="gps">📍 Estou no local</button></div>
     <div class="row2">${f('logradouro', 'Logradouro', 'Rua, avenida...')}${f('numero', 'Número', 's/nº', 'inputmode="numeric"')}</div>
     <div class="row2">${f('bairro', 'Bairro', '')}${f('municipio', 'Município', 'digite para buscar', 'list="munis" autocomplete="off"')}</div>
@@ -362,7 +378,9 @@ function telaHome() {
     : `<a class="turno vazio" href="#equipe"><span>👮 <b>Assuma o turno:</b> informe equipe e viatura uma vez e elas entram em todos os BOs.</span><span>›</span></a>`;
   const velhos = rascunhos().filter(x => Date.now() - x.atualizado > 864e5 && ((x.env || []).length || x.d.vitima || x.d.autor));
   const banner = velhos.length ? `<div class="aviso2" style="display:flex;gap:10px;align-items:center;justify-content:space-between"><span>🔒 ${velhos.length} rascunho(s) com nomes de envolvidos há mais de 24h neste aparelho.</span><button class="btn red sm" id="apagaVelhos">Apagar</button></div>` : '';
-  app.innerHTML = `${banner}${turnoHTML}<div class="search"><span>🔎</span><input id="q" type="search" placeholder="Buscar ocorrência, natureza ou POP..." value="${esc(q)}"></div><div id="lista"></div>
+  const ch = checklistServico(), chOk = ch.itens.filter(i => ch.marcados[i]).length;
+  const ferramentas = `<div class="tools"><a href="#calc">🧮<span>Menor potencial</span></a><a href="#leis">📖<span>Legislação</span></a><a href="#servico">✅<span>Checklist ${chOk}/${ch.itens.length}</span></a><a href="#receber">📷<span>Receber BO</span></a></div>`;
+  app.innerHTML = `${banner}${turnoHTML}${ferramentas}<div class="search"><span>🔎</span><input id="q" type="search" placeholder="Buscar ocorrência, natureza ou POP..." value="${esc(q)}"></div><div id="lista"></div>
   <p class="aviso">Ferramenta de apoio. Não substitui os POPs, diretrizes e o julgamento do policial. Confira tudo antes de lançar no BOU.</p>`;
   const lista = $('#lista');
   function desenhar() {
@@ -414,7 +432,9 @@ function desenharTipo() {
   const lst = checklist(T, R);
   const pend = lst.filter(c => !c.feito).length;
   const tabs = abasDisponiveis().map(([k, l]) => [k, k === 'check' ? `${l} <span class="badge ${pend ? '' : 'ok'}">${pend || '✓'}</span>` : l]);
-  app.innerHTML = `${T.aviso ? `<div class="aviso2">${esc(T.aviso)}</div>` : ''}<div class="tabs">${tabs.map(([k, l]) => `<button data-aba="${k}" class="${aba === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="conteudo"></div>${TEM_FIREBASE ? '<p class="aviso"><button class="btn sm" id="sugerir">💬 Sugerir correção neste modelo</button></p>' : ''}`;
+  const rev = (EXTRAS.revisoes || {})[T.id];
+  const selo = rev ? `<div class="selo">✓ Revisado por <b>${esc(rev.por)}</b>${rev.data ? ' em ' + esc(rev.data) : ''}</div>` : (T.aviso ? `<div class="aviso2">${esc(T.aviso)}</div>` : '');
+  app.innerHTML = `${selo}<div class="tabs">${tabs.map(([k, l]) => `<button data-aba="${k}" class="${aba === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="conteudo"></div>${TEM_FIREBASE ? '<p class="aviso"><button class="btn sm" id="sugerir">💬 Sugerir correção neste modelo</button></p>' : ''}`;
   if ($('#sugerir')) $('#sugerir').onclick = sugerirCorrecao;
   app.querySelectorAll('[data-aba]').forEach(b => b.onclick = () => { aba = b.dataset.aba; desenharTipo(); window.scrollTo(0, 0); });
   document.querySelectorAll('.fab').forEach(f => f.remove());
@@ -444,14 +464,14 @@ function abaModelo(c0) {
     html += linhaTempoHTML(d);
     html += `<div class="card"><h3>🧩 Blocos anexáveis</h3><div class="sumhint" style="margin-bottom:6px">Abordagem e uso da força</div><div class="addmods">${grupo('abordagem')}</div><div class="sumhint" style="margin:10px 0 6px">Apreensões (cadeia de custódia)</div><div class="addmods">${grupo('apreensao')}</div></div>
     <div class="card"><h3>➕ Informações complementares</h3>${campoHTML({ id: 'obs', l: 'Texto livre (entra no final)', t: 'area' }, d, 'd')}
-      <div class="frases"><div class="sumhint" style="margin-bottom:6px">Frases prontas — toque para inserir:</div><div class="sug">${fr.map((f, i) => `<span class="fr"><button type="button" data-frase="${i}">${esc(f.length > 60 ? f.slice(0, 58) + '…' : f)}</button><button type="button" class="frx" data-frx="${i}" aria-label="apagar">×</button></span>`).join('') || '<span class="sumhint">nenhuma ainda</span>'}</div>
+      <div class="frases">${(EXTRAS.frasesUnidade || []).length ? `<div class="sumhint" style="margin-bottom:6px">Frases da unidade:</div><div class="sug" style="margin-bottom:8px">${EXTRAS.frasesUnidade.map((f, i) => `<button type="button" data-fu="${i}">🏛️ ${esc(f.length > 60 ? f.slice(0, 58) + '…' : f)}</button>`).join('')}</div>` : ''}<div class="sumhint" style="margin-bottom:6px">Minhas frases — toque para inserir:</div><div class="sug">${fr.map((f, i) => `<span class="fr"><button type="button" data-frase="${i}">${esc(f.length > 60 ? f.slice(0, 58) + '…' : f)}</button><button type="button" class="frx" data-frx="${i}" aria-label="apagar">×</button></span>`).join('') || '<span class="sumhint">nenhuma ainda</span>'}</div>
       <button type="button" class="btn sm" id="salvaFrase" style="margin-top:8px">＋ Salvar o texto livre como frase pronta</button></div></div>`;
   }
   html += `<div class="card" id="saida"><h3>📄 Descrição sumária</h3>
     <div class="estilos">${ESTILOS.map(e => `<button data-estilo="${e.id}" class="${(R.estilo || 'cron') === e.id ? 'on' : ''}" title="${esc(e.d)}">${esc(e.nome)}</button>`).join('')}</div>
     <div class="sumhint" id="estiloDesc" style="margin:6px 0 8px">${esc((ESTILOS.find(e => e.id === (R.estilo || 'cron')) || ESTILOS[0]).d)}</div>
     <div class="out" id="out"></div><div class="pend" id="pend"></div>
-    <div class="actions"><button class="btn pri" id="copiar">Copiar texto</button>${navigator.share && window.top === window ? '<button class="btn" id="compart">Compartilhar</button>' : ''}<button class="btn" id="editar">${R.editado != null ? 'Voltar ao automático' : 'Editar à mão'}</button><button class="btn red" id="limpar">Novo BO</button></div></div>`;
+    <div class="actions"><button class="btn pri" id="copiar">Copiar texto</button>${navigator.share && window.top === window ? '<button class="btn" id="compart">Compartilhar</button>' : ''}<button class="btn" id="editar">${R.editado != null ? 'Voltar ao automático' : 'Editar à mão'}</button><button class="btn" id="qrPassar">📤 Passar por QR</button><button class="btn red" id="limpar">Novo BO</button></div></div>`;
   c.innerHTML = html;
   document.querySelectorAll('.fab').forEach(f => f.remove());
   const fab = document.createElement('button'); fab.className = 'fab'; fab.textContent = '📄 Ver texto';
@@ -511,6 +531,10 @@ function ligarModelo(c) {
     if (el.type === 'checkbox') { objDe(el.dataset.s)[el.dataset.k] = el.checked; mudou(true); }
     else if (el.tagName === 'SELECT') { objDe(el.dataset.s)[el.dataset.k] = el.value; mudou(true); }
     else if (el.dataset.k === 'municipio') { const t = turno(); if (filled(el.value) && !t.municipio) { t.municipio = el.value; LS.set(uidKey('equipe'), t); } }
+    else if (el.tagName === 'INPUT' && el.type === 'text') {
+      const lista = el.dataset.s === 'd' ? [...GERAIS, ...(T.campos || [])] : (MODULOS[(R.mods[Number(el.dataset.s.slice(1))] || {}).tipo] || { campos: [] }).campos;
+      lembrar(el.dataset.k, el.value, lista.find(c => c.id === el.dataset.k));
+    }
   });
   c.addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -524,6 +548,7 @@ function ligarModelo(c) {
     if (b.dataset.add) { R.mods.push({ tipo: b.dataset.add, m: {} }); toast(`${MODULOS[b.dataset.add].nome} adicionado`); mudou(true); return; }
     if (b.dataset.rm !== undefined) { if (!await confirmar('Remover esta apreensão?', 'Remover')) return; R.mods.splice(Number(b.dataset.rm), 1); mudou(true); return; }
     if (b.dataset.frase !== undefined) { const f = frases()[Number(b.dataset.frase)]; R.d.obs = (filled(R.d.obs) ? R.d.obs.trim() + ' ' : '') + f; mudou(true); return; }
+    if (b.dataset.fu !== undefined) { const f = EXTRAS.frasesUnidade[Number(b.dataset.fu)]; R.d.obs = (filled(R.d.obs) ? R.d.obs.trim() + ' ' : '') + f; mudou(true); return; }
     if (b.dataset.frx !== undefined) { if (!await confirmar('Apagar esta frase pronta?', 'Apagar')) return; const fr = frases(); fr.splice(Number(b.dataset.frx), 1); LS.set(uidKey('frases'), fr); rerender(); return; }
     if (b.id === 'salvaFrase') { if (!filled(R.d.obs)) { toast('Escreva o texto livre primeiro'); return; } const fr = frases(); fr.unshift(R.d.obs.trim()); LS.set(uidKey('frases'), [...new Set(fr)].slice(0, 30)); toast('Frase salva'); rerender(); return; }
     if (b.id === 'buscaCep') { buscarCep(true); return; }
@@ -551,6 +576,7 @@ function ligarModelo(c) {
     else R.editado = textoFinal();
     agendarSalvar(); rerender(); if (R.editado != null) $('#saida').scrollIntoView();
   };
+  $('#qrPassar').onclick = () => passarQR(R);
   $('#limpar').onclick = async () => { if (!await confirmar('Começar um novo BO deste tipo? O atual fica salvo em Rascunhos.', 'Novo BO')) return; salvarRascunho(R); R = novoRascunho(T); geraisOpen = null; try { sessionStorage.removeItem('bou.atual'); } catch {} desenharTipo(); window.scrollTo(0, 0); };
 }
 
@@ -747,7 +773,7 @@ async function sairConta(semPerguntar) {
     const ok = await confirmar('<p>Sair da conta neste aparelho?</p><label class="chk"><input type="checkbox" id="limparSair" checked><span>Apagar rascunhos e frases prontas deste aparelho</span></label>', 'Sair', true);
     if (!ok) return; limpar = (confirmar.valores || {}).limparSair;
   }
-  if (limpar) ['rascunhos', 'frases', 'conteudo'].forEach(k => LS.del(uidKey(k)));
+  if (limpar) ['rascunhos', 'frases', 'conteudo', 'hist'].forEach(k => LS.del(uidKey(k)));
   try { sessionStorage.clear(); } catch {}
   R = null; await auth.signOut();
 }
@@ -781,6 +807,8 @@ async function telaEquipe() {
     <div class="sumhint">Salvo automaticamente.</div></div>
   <div class="card"><h3>📞 Contatos de ${esc(eq.municipio || 'seu município')}</h3><div id="contatos" class="sumhint">${eq.municipio ? 'Carregando...' : 'Informe o município acima.'}</div>
     <details style="margin-top:10px"><summary class="sumhint" style="cursor:pointer">＋ Sugerir delegacia, Conselho Tutelar, CREAS...</summary>${formLocalHTML(eq.municipio)}<button class="btn gold sm" id="enviarLocal">Enviar sugestão</button></details></div>
+  <div class="card"><h3>🌓 Aparência</h3><div class="sumhint" style="margin-bottom:6px">Tema</div><div class="chips">${[['auto', 'Automático'], ['claro', 'Claro'], ['escuro', 'Escuro (noturno)']].map(([v, l]) => `<button data-tema="${v}" class="${(aparencia().tema || 'auto') === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="sumhint" style="margin:10px 0 6px">Tamanho da letra</div><div class="chips">${[[0.9, 'A−'], [1, 'A'], [1.12, 'A+'], [1.25, 'A++']].map(([v, l]) => `<button data-fonte="${v}" class="${Number(aparencia().fonte || 1) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
   <div class="card"><h3>📝 Estilo de texto padrão</h3><div class="chips">${ESTILOS.map(e => `<button data-est="${e.id}" class="${cf.estilo === e.id ? 'on' : ''}">${esc(e.nome)}</button>`).join('')}</div></div>
   <div class="card"><h3>🔐 Bloqueio do app</h3>
     <div class="chips"><button data-lock="nenhum" class="${lk.tipo === 'nenhum' ? 'on' : ''}">Sem bloqueio</button><button data-lock="pin" class="${lk.tipo === 'pin' ? 'on' : ''}">PIN</button>${bio ? `<button data-lock="digital" class="${lk.tipo === 'digital' ? 'on' : ''}">PIN + digital/rosto</button>` : ''}</div>
@@ -798,6 +826,8 @@ async function telaEquipe() {
   app.onchange = e => { const el = e.target; if (el.dataset.mk === 'grad') { eq.membros[Number(el.dataset.mi)].grad = el.value; salvarEq(); } if (el.dataset.k === 'municipio') telaEquipe(); };
   $('#addMembro').onclick = () => { eq.membros.push({ grad: '', nome: '' }); LS.set(uidKey('equipe'), eq); telaEquipe(); };
   app.querySelectorAll('[data-mrm]').forEach(b => b.onclick = () => { eq.membros.splice(Number(b.dataset.mrm), 1); salvarEq(); telaEquipe(); });
+  app.querySelectorAll('[data-tema]').forEach(b => b.onclick = () => { const a = aparencia(); a.tema = b.dataset.tema; LS.set('bou.aparencia', a); aplicarAparencia(); telaEquipe(); });
+  app.querySelectorAll('[data-fonte]').forEach(b => b.onclick = () => { const a = aparencia(); a.fonte = Number(b.dataset.fonte); LS.set('bou.aparencia', a); aplicarAparencia(); telaEquipe(); });
   app.querySelectorAll('[data-est]').forEach(b => b.onclick = () => { const x = cfg(); x.estilo = b.dataset.est; LS.set(uidKey('config'), x); telaEquipe(); toast('Estilo padrão salvo'); });
   app.querySelectorAll('[data-lock]').forEach(b => b.onclick = async () => {
     if (b.dataset.lock === 'nenhum') { LS.set(uidKey('lock'), { tipo: 'nenhum', minutos: lk.minutos }); toast('Bloqueio desativado'); telaEquipe(); return; }
@@ -807,7 +837,7 @@ async function telaEquipe() {
   $('#expira').onchange = e => { const x = cfg(); x.expira = Number(e.target.value); LS.set(uidKey('config'), x); toast('Ajuste salvo'); };
   $('#instalar').onclick = async () => {
     if (promptInstalar) { promptInstalar.prompt(); const r = await promptInstalar.userChoice.catch(() => ({})); promptInstalar = null; if (r.outcome === 'accepted') toast('Instalando...'); return; }
-    confirmar(instrucoesInstalar(), 'Entendi', true);
+    confirmar(instrucoesInstalar(), 'Entendi', true, true);
   };
   $('#recarregar').onclick = async () => { try { await carregarConteudo(true); toast('Modelos atualizados'); telaEquipe(); } catch { toast('Não foi possível atualizar agora'); } };
   if ($('#sair')) $('#sair').onclick = () => sairConta();
@@ -843,7 +873,8 @@ function telaEstudo() {
   setNav('estudo');
   const cats = CATEGORIAS.filter(c => TIPOS.some(t => t.cat === c.id && t.dicas));
   app.innerHTML = `<div class="card"><h3>📚 O que estudar?</h3><div class="f"><label>Grupo</label><select id="eCat"><option value="">Todos</option>${cats.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select></div>
-    <div class="actions"><button class="btn pri" id="eQuiz">Quiz (10 perguntas)</button><button class="btn gold" id="eCards">Cartões de revisão</button></div></div><div id="eArea"></div>`;
+    <div class="actions"><button class="btn pri" id="eQuiz">Quiz (10 perguntas)</button><button class="btn gold" id="eCards">Cartões de revisão</button>${SIMULADOS.length ? '<button class="btn" id="eSim">🎯 Simulados de ocorrência</button>' : ''}</div></div><div id="eArea"></div>`;
+  if ($('#eSim')) $('#eSim').onclick = listaSimulados;
   $('#eQuiz').onclick = () => quiz(gerarPerguntas($('#eCat').value).slice(0, 10));
   $('#eCards').onclick = () => cartoes($('#eCat').value);
 }
@@ -882,6 +913,167 @@ function cartoes(cat) {
     $('#fcProx').onclick = () => { i = (i + 1) % cs.length; mostra(false); };
   };
   mostra(false);
+}
+
+/* ------------------------- aparência ------------------------- */
+const aparencia = () => LS.get('bou.aparencia', { tema: 'auto', fonte: 1 });
+function aplicarAparencia() {
+  const a = aparencia();
+  const escuro = a.tema === 'escuro' || (a.tema !== 'claro' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro';
+  document.documentElement.style.zoom = a.fonte && a.fonte !== 1 ? a.fonte : '';
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = escuro ? '#060d18' : '#0b2545';
+}
+aplicarAparencia();
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarAparencia); } catch {}
+
+/* ------------------------- checklist de assunção de serviço ------------------------- */
+const ITENS_SERVICO = [
+  ['Armamento', ['Arma conferida (numeração anotada) e em condições', 'Munição contada e carregadores completos', 'Colete balístico dentro da validade', 'Algemas e chave', 'Instrumento de menor potencial (se habilitado)']],
+  ['Comunicação', ['Rádio/HT testado com o COPOM', 'Celular funcional carregado com PMPR Mobile', 'Lanterna com carga']],
+  ['Viatura', ['Combustível', 'Pneus e estepe', 'Luzes, giroflex e sirene', 'CRLV e documentos da viatura', 'Avarias anotadas no livro/sistema', 'Limpeza e compartimento de presos verificados']],
+  ['Material de ocorrência', ['Luvas descartáveis', 'Embalagens e lacres para vestígios', 'Fita zebrada / cones', 'Kit de primeiros socorros', 'Formulários (ACED, termo de constatação, FAV)']]
+];
+function checklistServico() {
+  const salvo = LS.get(uidKey('servico'), {});
+  const marcados = salvo.dia === hoje() ? salvo.m || {} : {};
+  return { itens: ITENS_SERVICO.flatMap(g => g[1]), marcados };
+}
+function telaServico() {
+  setTop('Assunção de serviço', 'Confira antes de sair — zera a cada dia');
+  setNav('');
+  const { itens, marcados } = checklistServico();
+  const ok = itens.filter(i => marcados[i]).length;
+  app.innerHTML = `<div class="card"><h3>✅ ${ok} de ${itens.length} conferidos</h3><div class="prog"><i style="width:${Math.round(ok / itens.length * 100)}%"></i></div></div>
+    ${ITENS_SERVICO.map(([g, l]) => `<div class="card"><h3>${esc(g)}</h3><ul class="cl">${l.map(i => `<li><input type="checkbox" data-sv="${esc(i)}" ${marcados[i] ? 'checked' : ''}><div class="${marcados[i] ? 'done' : ''}">${esc(i)}</div></li>`).join('')}</ul></div>`).join('')}
+    <div class="actions" style="justify-content:center"><button class="btn red" id="svZerar">Desmarcar tudo</button></div>`;
+  app.querySelectorAll('[data-sv]').forEach(b => b.onchange = () => { const c = checklistServico(); c.marcados[b.dataset.sv] = b.checked; LS.set(uidKey('servico'), { dia: hoje(), m: c.marcados }); telaServico(); });
+  $('#svZerar').onclick = () => { LS.set(uidKey('servico'), { dia: hoje(), m: {} }); telaServico(); };
+}
+
+/* ------------------------- calculadora de menor potencial ------------------------- */
+let calcSel = [];
+const fmtPena = a => a === 0 ? 'sem prisão' : a >= 1 ? `${+a.toFixed(2)} ano(s)`.replace('.', ',') : `${Math.round(a * 12)} mês(es)`;
+function telaCalc() {
+  setTop('Menor potencial ofensivo', 'Soma das penas máximas — Lei 9.099/95, art. 61');
+  setNav('');
+  const lista = (window.LEGIS || []).filter(x => x.max !== null);
+  const total = calcSel.reduce((s, k) => s + (lista[k] ? lista[k].max : 0), 0);
+  const temLMP = calcSel.some(k => lista[k] && lista[k].lei === 'Lei 11.340');
+  const tcip = !temLMP && total <= 2;
+  app.innerHTML = `<div class="card calcres ${calcSel.length ? (tcip ? 'ok' : 'no') : ''}"><div class="sumhint">Soma das penas máximas</div><div class="calcn">${calcSel.length ? fmtPena(total) : '—'}</div>
+      <div>${!calcSel.length ? 'Marque os crimes/contravenções da ocorrência.' : temLMP ? '⛔ <b>Violência doméstica contra a mulher:</b> nunca é TCIP (art. 41 da Lei 11.340) — Delegacia.' : tcip ? '✓ <b>Cabe TCIP</b> (até 2 anos), se o autor assinar o compromisso de comparecimento.' : '⛔ <b>Passa de 2 anos:</b> não é menor potencial — apresentar na Delegacia.'}</div>
+      ${calcSel.length ? '<button class="btn sm" id="calcLimpar" style="margin-top:8px">Limpar</button>' : ''}</div>
+    <div class="search"><span>🔎</span><input id="cq" type="search" placeholder="Buscar crime ou artigo..."></div>
+    <div class="card"><ul class="cl" id="calcLista">${lista.map((x, i) => `<li data-ct="${esc(norm(x.titulo + ' ' + x.lei + ' ' + x.art))}"><input type="checkbox" data-ci="${i}" ${calcSel.includes(i) ? 'checked' : ''}><div><b>${esc(x.titulo)}</b> <span class="sumhint">${esc(x.lei)} art. ${esc(x.art)}</span><small>pena máxima: ${fmtPena(x.max)}</small></div></li>`).join('')}</ul></div>
+    <p class="aviso">Regra geral para concurso material: somam-se as penas máximas. Aumentos (repouso noturno, majorantes) e o concurso formal/crime continuado podem mudar o resultado — em caso de dúvida, consulte o Delegado. Estimativa de apoio, não substitui a análise jurídica.</p>`;
+  app.querySelectorAll('[data-ci]').forEach(b => b.onchange = () => { const i = Number(b.dataset.ci); calcSel = b.checked ? [...calcSel, i] : calcSel.filter(x => x !== i); const y = scrollY; telaCalc(); scrollTo(0, y); });
+  if ($('#calcLimpar')) $('#calcLimpar').onclick = () => { calcSel = []; telaCalc(); };
+  $('#cq').oninput = e => { const t = norm(e.target.value); app.querySelectorAll('[data-ct]').forEach(li => { li.hidden = t && !li.dataset.ct.includes(t); }); };
+}
+
+/* ------------------------- legislação ------------------------- */
+function telaLeis() {
+  setTop('Legislação', 'Resumos dos artigos usados no app');
+  setNav('');
+  const L = window.LEGIS || [];
+  const leis = [...new Set(L.map(x => x.lei))];
+  app.innerHTML = `<div class="search"><span>🔎</span><input id="lq" type="search" placeholder="Buscar: desacato, 306, busca pessoal..."></div>
+    <div class="chips" style="margin-bottom:12px">${leis.map(l => `<button data-lf="${esc(l)}">${esc(l)}</button>`).join('')}</div>
+    <div id="leisLista">${L.map(x => `<div class="card lei" data-lt="${esc(norm(x.titulo + ' ' + x.lei + ' ' + x.art + ' ' + x.resumo))}" data-ll="${esc(x.lei)}"><h3>${esc(x.titulo)} <span class="pop">${esc(x.lei)} art. ${esc(x.art)}</span></h3><p style="margin:0 0 6px;font-size:14.5px">${esc(x.resumo)}</p>${x.url ? `<a class="sumhint" href="${esc(x.url)}" target="_blank" rel="noopener">Texto oficial (Planalto) ↗</a>` : ''}</div>`).join('')}</div>
+    <p class="aviso">Resumos para consulta rápida. Sempre confira o texto oficial e atualizado da lei.</p>`;
+  let filtro = '';
+  const aplica = () => { const t = norm($('#lq').value); app.querySelectorAll('.lei').forEach(c => { c.hidden = (t && !c.dataset.lt.includes(t)) || (filtro && c.dataset.ll !== filtro); }); };
+  $('#lq').oninput = aplica;
+  app.querySelectorAll('[data-lf]').forEach(b => b.onclick = () => { filtro = filtro === b.dataset.lf ? '' : b.dataset.lf; app.querySelectorAll('[data-lf]').forEach(x => x.classList.toggle('on', x.dataset.lf === filtro)); aplica(); });
+}
+
+/* ------------------------- passar rascunho por QR Code ------------------------- */
+const QR_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+function carregarScript(src) { return new Promise((ok, erro) => { if (document.querySelector(`script[src="${src}"]`) && window.QRCode) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = erro; document.head.appendChild(s); }); }
+async function compactar(obj) { const st = new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('gzip')); return b64(await new Response(st).arrayBuffer()); }
+async function descompactar(txt) { const st = new Blob([unb64(txt)]).stream().pipeThrough(new DecompressionStream('gzip')); return JSON.parse(await new Response(st).text()); }
+async function passarQR(rd) {
+  try { await carregarScript(QR_CDN); } catch { toast('Sem internet para carregar o gerador de QR (só na 1ª vez)'); return; }
+  const dados = await compactar({ v: 1, tipo: rd.tipo, d: rd.d, env: rd.env || [], mods: rd.mods || [], estilo: rd.estilo, editado: rd.editado });
+  const TAM = 800, n = Math.ceil(dados.length / TAM), id = Math.random().toString(36).slice(2, 6);
+  const partes = Array.from({ length: n }, (_, i) => `BOU|${id}|${i + 1}|${n}|${dados.slice(i * TAM, (i + 1) * TAM)}`);
+  const w = document.createElement('div'); w.className = 'dlg';
+  w.innerHTML = `<div class="dlgbox" style="text-align:center"><b>Passar rascunho por QR Code</b><p class="sumhint">No outro celular: tela inicial → <b>📷 Receber BO</b> e aponte para este código${n > 1 ? ` (são ${n} partes, que trocam sozinhas)` : ''}. Os dados não passam pela internet.</p><div id="qrBox" style="display:inline-block;background:#fff;padding:10px;border-radius:10px"></div><div class="sumhint" id="qrParte"></div><div class="actions" style="justify-content:center"><button class="btn pri" id="qrFechar">Fechar</button></div></div>`;
+  document.body.appendChild(w);
+  const lado = Math.min(300, innerWidth - 90);
+  let i = 0, qr = null;
+  const mostra = () => { $('#qrBox').innerHTML = ''; qr = new QRCode($('#qrBox'), { text: partes[i], width: lado, height: lado, correctLevel: QRCode.CorrectLevel.L }); $('#qrParte').textContent = n > 1 ? `parte ${i + 1} de ${n}` : ''; i = (i + 1) % n; };
+  mostra(); const timer = n > 1 ? setInterval(mostra, 1300) : null;
+  $('#qrFechar').onclick = () => { clearInterval(timer); w.remove(); };
+}
+function telaReceber() {
+  setTop('Receber rascunho', 'Leia o QR Code do celular do colega');
+  setNav('');
+  if (!('BarcodeDetector' in window)) { app.innerHTML = '<div class="card"><h3>📷 Leitor indisponível</h3><p>Este navegador não lê QR Code. Use o Google Chrome atualizado no Android.</p></div>'; return; }
+  app.innerHTML = `<div class="card" style="text-align:center"><video id="cam" playsinline muted style="width:100%;max-width:420px;border-radius:12px;background:#000"></video><p id="camInfo" class="sumhint">Aponte para o QR Code...</p><button class="btn red" id="camParar">Cancelar</button></div>`;
+  const partes = {}; let total = 0, stream = null, ativo = true;
+  const parar = () => { ativo = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
+  $('#camParar').onclick = () => { parar(); location.hash = '#inicio'; };
+  window.addEventListener('hashchange', parar, { once: true });
+  (async () => {
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
+    catch { $('#camInfo').textContent = 'Permita o uso da câmera para ler o código.'; return; }
+    const v = $('#cam'); v.srcObject = stream; await v.play();
+    const det = new BarcodeDetector({ formats: ['qr_code'] });
+    while (ativo) {
+      try {
+        for (const c of await det.detect(v)) {
+          const m = /^BOU\|(\w+)\|(\d+)\|(\d+)\|(.*)$/s.exec(c.rawValue || ''); if (!m) continue;
+          total = Number(m[3]); partes[m[2]] = m[4];
+          $('#camInfo').textContent = `Lidas ${Object.keys(partes).length} de ${total} parte(s)...`;
+        }
+        if (total && Object.keys(partes).length === total) {
+          parar();
+          const dados = await descompactar(Array.from({ length: total }, (_, i) => partes[i + 1]).join(''));
+          const t = tipoPorId(dados.tipo);
+          if (!t) { app.innerHTML = '<div class="empty">Você não tem acesso a este tipo de ocorrência.</div>'; return; }
+          const novo = { ...novoRascunho(t), d: dados.d, env: dados.env, mods: dados.mods, estilo: dados.estilo, editado: dados.editado ?? null };
+          salvarRascunho(novo); toast('Rascunho recebido ✓'); abrirRid = novo.id; aba = 'modelo'; location.hash = '#t-' + t.id; return;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 250));
+    }
+  })();
+}
+
+/* ------------------------- simulados ------------------------- */
+function listaSimulados() {
+  $('#eArea').innerHTML = `<div class="card"><h3>🎯 Simulados</h3>${SIMULADOS.map((s, i) => `<button class="tcard" style="width:100%;margin-bottom:8px;text-align:left" data-sim="${i}"><div class="ic">${(tipoPorId(s.tipo) || {}).icone || '🎯'}</div><div><b>${esc(s.titulo)}</b><small>${s.etapas.length} etapa(s) • ${esc((tipoPorId(s.tipo) || {}).nome || '')}</small></div></button>`).join('')}</div>`;
+  $('#eArea').querySelectorAll('[data-sim]').forEach(b => b.onclick = () => rodarSimulado(SIMULADOS[Number(b.dataset.sim)]));
+}
+function rodarSimulado(sim) {
+  let e = 0, pts = 0;
+  const area = $('#eArea');
+  const passo = () => {
+    if (e >= sim.etapas.length) { area.innerHTML = `<div class="card" style="text-align:center"><div style="font-size:42px">${pts === sim.etapas.length ? '🏆' : '📖'}</div><h3 style="justify-content:center">${pts} de ${sim.etapas.length} decisões corretas</h3><div class="actions" style="justify-content:center"><a class="btn" href="#t-${sim.tipo}">Ver a ficha</a><button class="btn pri" id="simVolta">Outros simulados</button></div></div>`; $('#simVolta').onclick = listaSimulados; return; }
+    const et = sim.etapas[e];
+    const ops = embaralhar(et.o);
+    area.innerHTML = `<div class="card"><div class="sumhint">${esc(sim.titulo)} • etapa ${e + 1} de ${sim.etapas.length}</div><p style="font-size:15.5px;line-height:1.5">${esc(et.n)}</p><div class="sumhint">O que você faz?</div><div class="qops">${ops.map((o, k) => `<button data-op="${k}">${esc(o.t)}</button>`).join('')}</div><div id="simFb"></div></div>`;
+    area.querySelectorAll('[data-op]').forEach(b => b.onclick = () => {
+      const o = ops[Number(b.dataset.op)]; if (o.ok) pts++;
+      area.querySelectorAll('[data-op]').forEach(x => { x.disabled = true; if (ops[Number(x.dataset.op)].ok) x.classList.add('ok'); });
+      if (!o.ok) b.classList.add('no');
+      $('#simFb').innerHTML = `<div class="av ${o.ok ? 'okb' : 'warn'}">${o.ok ? '✓' : '✗'} ${esc(o.f)}</div><button class="btn pri" id="simProx">${e + 1 < sim.etapas.length ? 'Continuar' : 'Ver resultado'}</button>`;
+      $('#simProx').onclick = () => { e++; passo(); };
+    });
+  };
+  passo();
+}
+
+/* ------------------------- novidades ------------------------- */
+function mostrarNovidades() {
+  const n = EXTRAS.novidades;
+  if (!n || !n.texto || !n.versao) return;
+  const visto = LS.get(uidKey('novidadesVistas'), 0);
+  if (n.versao <= visto) return;
+  LS.set(uidKey('novidadesVistas'), n.versao);
+  confirmar(`<p><b>📣 Novidades no app</b></p><p style="white-space:pre-wrap">${esc(n.texto)}</p><p class="sumhint">${new Date(n.versao).toLocaleDateString('pt-BR')}</p>`, 'Entendi', true, true);
 }
 
 /* ------------------------- administrador ------------------------- */
@@ -938,10 +1130,20 @@ async function telaAdmin() {
       ${locs.map(l => `<div class="sugitem" data-lid="${l.id}"><div><b>${esc(l.tipo)}</b> — ${esc(l.nome)} <span class="sumhint">(${esc(l.municipio)})</span></div><div class="sumhint">${esc([l.telefone, l.endereco].filter(Boolean).join(' • '))} • sugerido por ${esc(l.porNome || '')}</div><div class="actions"><button class="btn sm gold" data-lok>Aprovar</button><button class="btn red sm" data-ldel>Recusar</button></div></div>`).join('')}
       <details style="margin-top:8px"><summary class="sumhint" style="cursor:pointer">＋ Adicionar contato aprovado</summary>${formLocalHTML(turno().municipio)}<button class="btn gold sm" id="addLocal">Adicionar</button></details></details>
     <details class="card"><summary>📊 Uso do app</summary><h3 style="margin-top:10px">Este mês</h3>${usoHTML(mes)}<h3 style="margin-top:14px">Mês anterior</h3>${usoHTML(ant)}</details>
+    <details class="card"><summary>🏛️ Frases da unidade <span class="sumhint">${(cont.base && cont.base.frasesUnidade || []).length} cadastrada(s)</span></summary>
+      <p class="sumhint">Aparecem para todos os usuários no campo "Informações complementares".</p>
+      <div id="fuLista">${(cont.base && cont.base.frasesUnidade || []).map((f, i) => `<div class="envrow"><div style="font-size:14px">${esc(f)}</div><button class="frx" data-furm="${i}">×</button></div>`).join('')}</div>
+      <textarea id="fuNova" placeholder="Nova frase padrão da unidade..." style="width:100%;min-height:70px;border:1px solid var(--ln);border-radius:10px;padding:10px;margin-top:6px"></textarea><button class="btn gold sm" id="fuAdd">Adicionar frase</button></details>
+    <details class="card"><summary>📣 Aviso de novidades</summary>
+      <p class="sumhint">Aparece uma vez para cada usuário ao abrir o app. ${cont.base && cont.base.novidades ? 'Último: ' + new Date(cont.base.novidades.versao).toLocaleString('pt-BR') : ''}</p>
+      <textarea id="novTxt" style="width:100%;min-height:90px;border:1px solid var(--ln);border-radius:10px;padding:10px">${esc(cont.base && cont.base.novidades ? cont.base.novidades.texto : '')}</textarea><button class="btn gold sm" id="novPub">Publicar aviso</button></details>
+    <details class="card"><summary>✓ Selos de revisão <span class="sumhint">${Object.keys(cont.base && cont.base.revisoes || {}).length} ficha(s) revisada(s)</span></summary>
+      <p class="sumhint">Registre quem revisou cada ficha (ex.: "1º Ten. Fulano — instrutor de Direito"). O selo aparece no topo da ficha.</p>
+      ${TIPOS.map(t => { const r = (cont.base && cont.base.revisoes || {})[t.id]; return `<div class="revrow"><div><b>${t.icone} ${esc(t.nome)}</b><br><span class="sumhint">${r ? '✓ ' + esc(r.por) + ' • ' + esc(r.data) : (t.aviso ? 'sem POP — revisão recomendada' : 'não revisada')}</span></div><button class="btn sm ${r ? '' : 'gold'}" data-rev="${t.id}">${r ? 'Alterar' : 'Revisar'}</button></div>`; }).join('')}</details>
     <div class="card"><h3>📚 Conteúdo (modelos protegidos)</h3>
       <div class="natlist">${ARQS_CONTEUDO.map(id => `<div><b>${id}.js</b> <span>${cont[id] ? `versão ${cont[id].versao || '?'} • ${cont[id].atualizado ? fmtQuando(cont[id].atualizado) : ''} • ${Math.round((cont[id].js || '').length / 1024)} KB` : '— não enviado'}</span></div>`).join('')}</div>
       <p class="sumhint">Envie os arquivos .js da pasta "conteudo" (pode selecionar vários) ou edite direto abaixo. Os usuários recebem a atualização automaticamente.</p>
-      <input type="file" id="arqs" accept=".js,text/javascript" multiple hidden><button class="btn gold" id="enviar">Enviar arquivos de conteúdo</button>
+      <input type="file" id="arqs" accept=".js,.json,text/javascript,application/json" multiple hidden><div class="actions"><button class="btn gold" id="enviar">Enviar arquivos (.js ou backup .json)</button><button class="btn" id="backup">⬇️ Baixar backup</button></div>
       <details style="margin-top:12px" id="editorBox"><summary class="sumhint" style="cursor:pointer">✏️ Editor de modelos</summary>
         <div class="f" style="margin-top:8px"><label>Arquivo</label><select id="edArq">${ARQS_CONTEUDO.map(id => `<option ${cont[id] ? '' : 'disabled'}>${id}</option>`).join('')}</select></div>
         <div class="search" style="margin:0 0 8px"><span>🔎</span><input id="edBusca" type="search" placeholder="Localizar texto no arquivo..."></div>
@@ -979,15 +1181,38 @@ async function telaAdmin() {
     if (!await confirmar(`Publicar ${lidos.map(x => x.id + '.js').join(', ')} para todos os usuários?`, 'Publicar')) return false;
     try {
       const batch = db.batch();
-      lidos.forEach(x => batch.set(db.collection('conteudo').doc(x.id), { js: x.js, versao: ((cont[x.id] && cont[x.id].versao) || 0) + 1, atualizado: Date.now(), por: usuario.email }));
+      lidos.forEach(x => batch.set(db.collection('conteudo').doc(x.id), { js: x.js, versao: ((cont[x.id] && cont[x.id].versao) || 0) + 1, atualizado: Date.now(), por: usuario.email }, { merge: true }));
       await batch.commit(); toast('Conteúdo publicado ✓');
       await carregarConteudo(true); telaAdmin(); return true;
     } catch (err) { toast('Erro ao publicar: ' + err.message); return false; }
   };
   $('#enviar').onclick = () => $('#arqs').click();
+  $('#backup').onclick = () => {
+    const j = { app: 'Descritivo BOU', gerado: new Date().toISOString(), arquivos: Object.fromEntries(ARQS_CONTEUDO.filter(id => cont[id]).map(id => [id, cont[id].js])), extras: { frasesUnidade: (cont.base || {}).frasesUnidade || [], revisoes: (cont.base || {}).revisoes || {} } };
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(j, null, 1)], { type: 'application/json' })); a.download = `backup-modelos-bou-${hoje()}.json`; document.body.appendChild(a); a.click(); a.remove();
+    toast('Backup baixado — guarde em local seguro');
+  };
+  const baseRef = db.collection('conteudo').doc('base');
+  const fus = (cont.base && cont.base.frasesUnidade) || [];
+  $('#fuAdd').onclick = async () => { const t = $('#fuNova').value.trim(); if (!t) return; try { await baseRef.update({ frasesUnidade: [...fus, t] }); toast('Frase adicionada'); await carregarConteudo(true); telaAdmin(); } catch (e) { toast('Erro: ' + e.message); } };
+  app.querySelectorAll('[data-furm]').forEach(b => b.onclick = async () => { if (!await confirmar('Remover esta frase da unidade?', 'Remover')) return; const l = fus.filter((_, i) => i !== Number(b.dataset.furm)); try { await baseRef.update({ frasesUnidade: l }); await carregarConteudo(true); telaAdmin(); } catch (e) { toast('Erro: ' + e.message); } });
+  $('#novPub').onclick = async () => { const t = $('#novTxt').value.trim(); if (!t) return; if (!await confirmar('Publicar este aviso para todos os usuários?', 'Publicar')) return; try { await baseRef.update({ novidades: { texto: t, versao: Date.now() } }); toast('Aviso publicado'); telaAdmin(); } catch (e) { toast('Erro: ' + e.message); } };
+  app.querySelectorAll('[data-rev]').forEach(b => b.onclick = async () => {
+    const atual = ((cont.base && cont.base.revisoes) || {})[b.dataset.rev] || {};
+    const ok = await confirmar(`<p><b>Revisão da ficha</b></p><div class="f"><label>Revisado por (posto/graduação e nome)</label><input type="text" id="revPor" value="${esc(atual.por || '')}" style="width:100%;padding:10px;border:1px solid var(--ln);border-radius:10px"></div><div class="f"><label>Data</label><input type="date" id="revData" value="${esc(atual.iso || hoje())}" style="width:100%;padding:10px;border:1px solid var(--ln);border-radius:10px"></div><p class="sumhint">Deixe o nome vazio para remover o selo.</p>`, 'Salvar', true);
+    if (!ok) return;
+    const v = confirmar.valores || {};
+    try {
+      await baseRef.update({ [`revisoes.${b.dataset.rev}`]: v.revPor ? { por: v.revPor.trim(), iso: v.revData, data: fmtData(v.revData) } : firebase.firestore.FieldValue.delete() });
+      toast('Selo salvo'); await carregarConteudo(true); telaAdmin();
+    } catch (e) { toast('Erro: ' + e.message); }
+  });
   $('#arqs').onchange = async e => {
     const lidos = [];
-    for (const f of [...e.target.files]) { const id = f.name.replace(/\.js$/i, '').toLowerCase(); if (!ARQS_CONTEUDO.includes(id)) { toast(`Arquivo ignorado: ${f.name}`); continue; } lidos.push({ id, js: await f.text() }); }
+    for (const f of [...e.target.files]) {
+      if (/\.json$/i.test(f.name)) { try { const j = JSON.parse(await f.text()); Object.entries(j.arquivos || {}).forEach(([id, js]) => { if (ARQS_CONTEUDO.includes(id)) lidos.push({ id, js }); }); } catch { toast('Backup inválido'); } continue; }
+      const id = f.name.replace(/\.js$/i, '').toLowerCase(); if (!ARQS_CONTEUDO.includes(id)) { toast(`Arquivo ignorado: ${f.name}`); continue; } lidos.push({ id, js: await f.text() });
+    }
     if (lidos.length) publicar(lidos);
   };
   const carregaEd = () => { const id = $('#edArq').value; $('#edTxt').value = cont[id] ? cont[id].js : ''; };
@@ -1019,7 +1244,7 @@ function telaLogin(modo = 'entrar', msg = '') {
       ${cad ? '' : '<button class="btn sm" id="lesq">Esqueci a senha</button>'}</div>
     <p class="aviso">Após a solicitação, o administrador precisa aprovar seu acesso.</p>
     <button class="btn sm" id="linstalar" style="display:block;margin:6px auto 0">📲 Como instalar no celular</button></div>`;
-  $('#linstalar').onclick = async () => { if (promptInstalar) { promptInstalar.prompt(); promptInstalar = null; } else confirmar(instrucoesInstalar(), 'Entendi', true); };
+  $('#linstalar').onclick = async () => { if (promptInstalar) { promptInstalar.prompt(); promptInstalar = null; } else confirmar(instrucoesInstalar(), 'Entendi', true, true); };
   $('#ltroca').onclick = () => telaLogin(cad ? 'entrar' : 'cadastro');
   if ($('#lesq')) $('#lesq').onclick = async () => { const em = $('#lemail').value.trim(); if (!em) { toast('Digite seu e-mail acima'); return; } try { await auth.sendPasswordResetEmail(em); toast('E-mail de redefinição enviado'); } catch (e) { toast(erroAuth(e)); } };
   $('#flog').onsubmit = async e => {
@@ -1083,6 +1308,7 @@ async function iniciarSessao(user) {
   catch (e) { telaEspera(navigator.onLine ? 'semconteudo' : 'offline'); return; }
   await exigirDesbloqueio();
   rota();
+  mostrarNovidades();
 }
 
 /* ------------------------- roteador ------------------------- */
@@ -1101,6 +1327,10 @@ function rota() {
   else if (h === 'rascunhos') telaRascunhos();
   else if (h === 'equipe') telaEquipe();
   else if (h === 'estudo') telaEstudo();
+  else if (h === 'calc') telaCalc();
+  else if (h === 'leis') telaLeis();
+  else if (h === 'servico') telaServico();
+  else if (h === 'receber') telaReceber();
   else if (h === 'admin') telaAdmin();
   else { R = null; try { sessionStorage.removeItem('bou.atual'); } catch {} telaHome(); }
 }
