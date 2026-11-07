@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 
-const VERSAO = '5.0.0';
+const VERSAO = '5.1.0';
 const $ = s => document.querySelector(s);
 const app = $('#app'), top = $('#top');
 const PH_A = '⟦', PH_B = '⟧';
@@ -71,7 +71,7 @@ const ehAdmin = () => !!(perfil && ((perfil.perms && perfil.perms.admin) || (usu
 
 /* ------------------------- conteúdo (protegido) ------------------------- */
 function montarConteudo(fontes) {
-  const code = 'var CATEGORIAS=[],MODULOS={},TIPOS=[],SIMULADOS=[];\n' + fontes.map(f => `/* ${f.id} */\n${f.js}`).join('\n;\n') + '\n;return {CATEGORIAS:CATEGORIAS,MODULOS:MODULOS,TIPOS:TIPOS,SIMULADOS:SIMULADOS};';
+  const code = 'var CATEGORIAS=[],MODULOS={},TIPOS=[],SIMULADOS=[],SUGESTOES={};\n' + fontes.map(f => `/* ${f.id} */\n${f.js}`).join('\n;\n') + '\n;return {CATEGORIAS:CATEGORIAS,MODULOS:MODULOS,TIPOS:TIPOS,SIMULADOS:SIMULADOS,SUGESTOES:SUGESTOES};';
   // eslint-disable-next-line no-new-func
   return new Function(code)();
 }
@@ -82,6 +82,18 @@ function aplicarConteudo(fontes) {
   MODULOS = c.MODULOS;
   TIPOS = c.TIPOS.filter(t => cats.has(t.cat) || ehAdmin());
   SIMULADOS = (c.SIMULADOS || []).filter(x => TIPOS.find(t => t.id === x.tipo));
+  aplicarSugestoes(c.SUGESTOES || {});
+}
+// Opções pré-preenchidas: um toque preenche o campo; o policial ajusta depois se precisar
+function aplicarSugestoes(S) {
+  const pega = (pref, c) => S[pref + '.' + c.id] || S['*.' + c.id];
+  const liga = (lista, pref) => (lista || []).forEach(c => {
+    if (c.p || c.sug || ['chk', 'multi', 'sel', 'chips1', 'date', 'time', 'num'].includes(c.t)) return;
+    const x = pega(pref, c); if (!x) return;
+    if (Array.isArray(x)) c.sug = x; else { c.sug = x.o || []; c.sugM = !!x.m; }
+  });
+  TIPOS.forEach(t => liga(t.campos, t.id));
+  Object.entries(MODULOS).forEach(([k, m]) => liga(m.campos, 'mod:' + k));
 }
 async function carregarConteudo(forcar) {
   const ids = ['base', ...(ehAdmin() ? ARQS_CONTEUDO.slice(1) : (perfil.perms.cats || []))];
@@ -329,8 +341,9 @@ function campoHTML(c, obj, scope) {
   const ag = (c.agora ? `<button type="button" class="mini" data-agora="${c.id}" data-ms="${scope}">agora</button>` : '') + (ehCampoPlaca(c) && navigator.mediaDevices ? `<button type="button" class="mini" data-cam="${c.id}" data-ms="${scope}">📷 ler placa</button>` : '');
   const vm = validarCampo(c, v);
   inp += `<div class="valmsg" data-vm="${scope}|${c.id}" ${vm ? '' : 'hidden'}>⚠ ${esc(vm)}</div>`;
-  const sug = !filled(v) && c.t !== 'date' && c.t !== 'time' ? sugestoes(c, obj) : [];
-  const sugHTML = sug.length ? `<div class="sug">${sug.map(x => `<button type="button" data-sug="${esc(x)}" data-ms="${scope}" data-sk="${c.id}">${esc(x)}</button>`).join('')}</div>` : '';
+  const sug = c.t !== 'date' && c.t !== 'time' && (!c.p || !filled(v)) ? sugestoes(c, obj) : [];
+  const multi = c.t === 'area' || c.sugM, vs = String(v || '');
+  const sugHTML = sug.length ? `<div class="sug">${sug.map(x => `<button type="button" class="${filled(v) && (multi ? vs.includes(x) : vs === x) ? 'on' : ''}" data-sug="${esc(x)}" data-ms="${scope}" data-sk="${c.id}">${multi && filled(v) && !vs.includes(x) ? '＋ ' : ''}${esc(x)}</button>`).join('')}</div>` : '';
   return `<div class="f"><label>${esc(c.l)}${mic}${ag}</label>${inp}${sugHTML}${help}</div>`;
 }
 function camposHTML(lista, obj, scope, chave) {
@@ -496,14 +509,21 @@ function atualizarSaida() {
     $('#pend').className = 'pend'; $('#pend').textContent = 'Edição manual: alterações nos campos não atualizam este texto.';
   } else {
     const txt = gerarTexto(T, R);
-    out.innerHTML = esc(txt).replace(/⟦([^⟧]*)⟧/g, '<mark>[$1]</mark>');
-    const n = (txt.match(/⟦/g) || []).length;
+    out.innerHTML = esc(txt).replace(/⟦([^⟧]*)⟧/g, '<mark>[$1]</mark>').replace(/\[([^\]\n<]{1,60})\]/g, '<mark>[$1]</mark>');
+    const n = (txt.match(/⟦/g) || []).length + (txt.match(/\[[^\]\n]{1,60}\]/g) || []).length;
     const p = $('#pend'); p.className = 'pend' + (n ? '' : ' ok');
     p.textContent = n ? `⚠ ${n} informação(ões) pendente(s) destacada(s) no texto.` : '✓ Sem lacunas no texto. Revise antes de lançar.';
   }
   const rv = $('#revisor'); if (rv) { const aberto = rv.querySelector('details') ? rv.querySelector('details').open : null; rv.innerHTML = revisorHTML(revisar()); if (aberto !== null) rv.querySelector('details').open = aberto; }
   const lst = checklist(T, R), pend = lst.filter(x => !x.feito).length;
   const b = document.querySelector('[data-aba="check"] .badge'); if (b) { b.textContent = pend || '✓'; b.className = 'badge' + (pend ? '' : ' ok'); }
+}
+function valorSug(c, atual, x) {
+  const multi = c.t === 'area' || c.sugM;
+  let v = String(atual || '').trim();
+  if (!multi) return v === x ? '' : x;
+  if (v.includes(x)) return v.replace(x, '').replace(/^[\s;,]+|[\s;,]+$/g, '').replace(/\s*([;,])\s*[;,]\s*/g, '$1 ').replace(/\s{2,}/g, ' ').trim();
+  return v ? v + (c.t === 'area' ? (/[.!?:]$/.test(v) ? ' ' : '. ') : ', ') + x : x;
 }
 const textoFinal = () => R.editado != null ? R.editado : gerarTexto(T, R).replace(/⟦([^⟧]*)⟧/g, '[$1]');
 
@@ -547,7 +567,7 @@ function ligarModelo(c) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.one !== undefined) { const o = objDe(b.dataset.s); o[b.dataset.k] = o[b.dataset.k] === b.dataset.one ? '' : b.dataset.one; mudou(true); return; }
     if (b.dataset.multi !== undefined) { const o = objDe(b.dataset.s); const arr = Array.isArray(o[b.dataset.k]) ? o[b.dataset.k] : []; o[b.dataset.k] = arr.includes(b.dataset.multi) ? arr.filter(x => x !== b.dataset.multi) : [...arr, b.dataset.multi]; mudou(true); return; }
-    if (b.dataset.sug !== undefined) { objDe(b.dataset.ms)[b.dataset.sk] = b.dataset.sug; mudou(true); return; }
+    if (b.dataset.sug !== undefined) { const o = objDe(b.dataset.ms), c0 = campoDef(b.dataset.ms, b.dataset.sk) || {}; o[b.dataset.sk] = valorSug(c0, o[b.dataset.sk], b.dataset.sug); lembrar(b.dataset.sk, o[b.dataset.sk], c0); mudou(true); return; }
     if (b.dataset.agora) { objDe(b.dataset.ms)[b.dataset.agora] = agora(); mudou(true); return; }
     if (b.dataset.mic) { ditar(b); return; }
     if (b.dataset.cam) { placaNoCampo(b.dataset.ms, b.dataset.cam); return; }
@@ -1482,7 +1502,7 @@ function termosEvitar(txt) { return TERMOS_EVITAR.filter(([re]) => re.test(txt))
 function revisar() {
   const out = [];
   const txt = textoFinal();
-  const lac = R.editado == null ? (gerarTexto(T, R).match(/⟦/g) || []).length : (txt.match(/\[[^\]]+\]/g) || []).length;
+  const lac = (txt.match(/\[[^\]\n]{1,60}\]/g) || []).length;
   if (lac) out.push({ n: 'warn', t: `${lac} lacuna(s) [entre colchetes] no texto` });
   checklist(T, R).filter(x => !x.feito).forEach(x => out.push({ n: x.auto === false ? 'red' : 'warn', t: (x.auto === false ? 'Indispensável: ' : 'Conferir: ') + x.t }));
   errosHorario(R.d).forEach(t => out.push({ n: 'red', t: 'Horário incoerente: ' + t }));
