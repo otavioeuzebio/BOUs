@@ -19,6 +19,26 @@ App (PWA) para gerar a **descrição sumária do BOU**, conferir os **itens indi
   - campos secundários em "Mais detalhes".
 - **Rascunhos e frases:** ficam só no aparelho e são apagados automaticamente depois do prazo escolhido.
 
+## Novidades da v3
+
+- **Envolvidos:** cadastrados uma vez e usados em todos os campos e no texto.
+- **Linha do tempo:** chegada, saída para a DP, apresentação e encerramento.
+- **Postos e graduações:** da equipe, de Soldado 3ª Classe a Coronel, incluindo Cadete e Aspirante.
+- **Blocos de abordagem:**
+  - busca pessoal/veicular com a fundamentação do Manual de Abordagem (CPP 244; STJ RHC 158.580 e Teses 236/237), com alertas quando os elementos são insuficientes;
+  - uso da força e algemas (Dir. 004/2015, Lei 13.060, Dec. 12.341/24, SV 11);
+  - entrada em domicílio (Tema 280 STF, HC 598.051, Nota BG E00060/2023, ACED).
+- **Novas fichas:**
+  - Outros crimes: lesão corporal, ameaça, desacato/resistência/desobediência, arma ilegal, receptação, dano, estelionato, pessoa desaparecida e local de morte.
+  - Trânsito: acidente e embriaguez ao volante.
+- **Contatos por município:** delegacias, Conselho Tutelar, CREAS etc., sugeridos pelos usuários e aprovados pelo administrador.
+- **Sugestão de correção:** enviada ao administrador a partir de cada ficha.
+- **Acesso com prazo de validade:** definido por usuário.
+- **Estatística de uso:** sem dados pessoais.
+- **Editor de modelos:** no painel Admin.
+- **Bloqueio por PIN ou digital/rosto** e limpeza dos rascunhos ao sair.
+- **Modo estudo:** quiz e cartões de revisão.
+
 ## Arquivos
 
 ```
@@ -30,7 +50,7 @@ firestore.rules     regras de segurança (copiar para o Firebase)
 sw.js, manifest.webmanifest, icons/   PWA / instalação
 ```
 
-Os arquivos de conteúdo (`base.js`, `ocorr.js`, `patrimonio.js`, `custodia.js`, `crise.js`, `gestao.js`) ficam **fora** do repositório e são enviados pelo **painel Admin** do app.
+Os arquivos de conteúdo (`base.js`, `ocorr.js`, `patrimonio.js`, `geral.js`, `transito.js`, `custodia.js`, `crise.js`, `gestao.js`) ficam **fora** do repositório e são enviados pelo **painel Admin** do app.
 
 ## Configurar o Firebase (uma vez)
 
@@ -41,7 +61,7 @@ Os arquivos de conteúdo (`base.js`, `ocorr.js`, `patrimonio.js`, `custodia.js`,
 5. Em **Configurações do projeto → Seus apps → Web (</>)**, registre o app e copie o `firebaseConfig` para `firebase-config.js`.
 6. Em **Authentication → Configurações → Domínios autorizados**, adicione `otavioeuzebio.github.io`.
 7. Abra o app, clique em **Solicitar acesso** com o e-mail de administrador e entre. Sua conta já entra aprovada como administrador.
-8. No painel **Admin**, clique em **Enviar arquivos de conteúdo** e selecione os 6 arquivos `.js`.
+8. No painel **Admin**, clique em **Enviar arquivos de conteúdo** e selecione os 8 arquivos `.js`.
 
 ## Atualizar
 

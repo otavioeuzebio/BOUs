@@ -6,10 +6,11 @@ service cloud.firestore {
     function emailAdmin() { return logado() && request.auth.token.email == 'otaviosilva.oe@gmail.com'; }
     function perfil() { return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data; }
     function temPerfil() { return logado() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)); }
-    function ativo() { return temPerfil() && perfil().status == 'ativo'; }
+    function noPrazo() { return perfil().get('validade', 0) == 0 || perfil().get('validade', 0) > request.time.toMillis(); }
+    function ativo() { return temPerfil() && perfil().status == 'ativo' && noPrazo(); }
     function admin() { return emailAdmin() || (ativo() && perfil().perms.admin == true); }
 
-    // Cadastro de usuários: cada um cria o próprio pedido como "pendente"; só o administrador aprova/altera.
+    // Cadastro: cada um cria o próprio pedido como "pendente"; só o administrador aprova, altera, define prazo.
     match /usuarios/{uid} {
       allow read: if logado() && (request.auth.uid == uid || admin());
       allow create: if logado() && request.auth.uid == uid && (
@@ -19,10 +20,29 @@ service cloud.firestore {
       allow update, delete: if admin();
     }
 
-    // Modelos protegidos: "base" para qualquer usuário aprovado; os demais grupos só para quem tem permissão.
+    // Modelos protegidos: "base" para qualquer aprovado; os demais grupos conforme permissão.
     match /conteudo/{grupo} {
       allow read: if admin() || (ativo() && (grupo == 'base' || grupo in perfil().perms.cats));
       allow write: if admin();
+    }
+
+    // Contatos por município: aprovados leem; qualquer aprovado sugere; administrador aprova.
+    match /locais/{id} {
+      allow read: if ativo() && (resource.data.status == 'aprovado' || admin());
+      allow create: if admin() || (ativo() && request.resource.data.status == 'sugerido' && request.resource.data.por == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    // Sugestões de correção: qualquer aprovado envia; só o administrador lê.
+    match /sugestoes/{id} {
+      allow create: if ativo() && request.resource.data.por == request.auth.uid && request.resource.data.texto.size() <= 2000;
+      allow read, update, delete: if admin();
+    }
+
+    // Estatística de uso (só contadores por tipo de ocorrência, sem dados pessoais).
+    match /stats/{mes} {
+      allow read: if admin();
+      allow create, update: if ativo();
     }
   }
 }
