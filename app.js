@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 
-const VERSAO = '3.0.0';
+const VERSAO = '3.0.1';
 const $ = s => document.querySelector(s);
 const app = $('#app'), top = $('#top');
 const PH_A = '⟦', PH_B = '⟧';
@@ -754,6 +754,16 @@ async function sairConta(semPerguntar) {
 
 /* ------------------------- turno e ajustes ------------------------- */
 let promptInstalar = null;
+function instrucoesInstalar() {
+  const ua = navigator.userAgent;
+  const instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (instalado) return '<p><b>✓ O app já está instalado</b> e aberto como aplicativo.</p>';
+  if (/FBAN|FBAV|Instagram|WhatsApp|Line\/|; wv\)/i.test(ua)) return '<p><b>Você abriu o link dentro de outro app</b> (WhatsApp, Instagram...). Esse navegador interno não instala aplicativos.</p><p>Toque nos <b>⋮</b> ou em <b>Abrir no navegador / Abrir no Chrome</b> e instale por lá.</p>';
+  if (/iPhone|iPad/i.test(ua)) return '<p><b>No iPhone:</b> abra no <b>Safari</b> → botão <b>Compartilhar</b> (quadrado com seta) → <b>Adicionar à Tela de Início</b>.</p>';
+  if (/SamsungBrowser/i.test(ua)) return '<p><b>Samsung Internet:</b> toque em <b>≡</b> (canto inferior) → <b>Adicionar página a</b> → <b>Tela inicial</b>.</p><p>Se não aparecer, abra o link no <b>Google Chrome</b>.</p>';
+  if (/Firefox/i.test(ua)) return '<p><b>Firefox:</b> toque em <b>⋮</b> → <b>Instalar</b> (ou Adicionar à tela inicial).</p>';
+  return '<p><b>Chrome no Android:</b> toque em <b>⋮</b> (canto superior direito) → <b>Instalar app</b> ou <b>Adicionar à tela inicial → Instalar</b>.</p><p>Se a opção não aparecer: confira se o endereço é exatamente <b>otavioeuzebio.github.io/BOUs/</b> (com BOU maiúsculo), atualize a página e aguarde alguns segundos.</p>';
+}
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptInstalar = e; });
 async function telaEquipe() {
   setTop('Turno e ajustes', 'Preenchidos automaticamente em cada BO novo');
@@ -781,7 +791,7 @@ async function telaEquipe() {
     <div class="sumhint">Rascunhos e frases ficam apenas neste aparelho.</div></div>
   <div class="card"><h3>👤 Conta</h3><p style="margin:0 0 10px;font-size:14px">${esc(perfil ? [ABREV[perfil.grad] || perfil.grad, perfil.nome].filter(Boolean).join(' ') : '')}<br><span class="sumhint">${esc(usuario ? usuario.email : 'modo local (sem Firebase)')}${perfil && perfil.validade ? ' • acesso até ' + new Date(perfil.validade).toLocaleDateString('pt-BR') : ''}</span></p>
     <div class="actions"><button class="btn" id="recarregar">Atualizar modelos</button>${usuario ? '<button class="btn red" id="sair">Sair</button>' : ''}</div></div>
-  <div class="card"><h3>📲 Instalar</h3><p style="margin:0 0 10px;font-size:14px">Android: menu ⋮ → "Instalar app". iPhone: Safari → Compartilhar → "Adicionar à Tela de Início".</p><button class="btn gold" id="instalar">Instalar na tela inicial</button></div>
+  <div class="card"><h3>📲 Instalar no celular</h3><p style="margin:0 0 10px;font-size:14px">Toque no botão: se o navegador permitir, a instalação abre direto; senão, aparecem as instruções para o seu aparelho.</p><button class="btn gold" id="instalar">Instalar na tela inicial</button></div>
   <p class="aviso">Descritivo BOU v${VERSAO} • ${TIPOS.length} fichas disponíveis para você.</p>`;
   const salvarEq = () => { eq.equipe = compoeEquipe(eq.membros) || eq.equipe; LS.set(uidKey('equipe'), eq); $('#eqPrev').textContent = eq.equipe || '—'; };
   app.oninput = e => { const el = e.target; if (el.dataset.s === 'eq') { eq[el.dataset.k] = el.value; LS.set(uidKey('equipe'), eq); } if (el.dataset.mk === 'nome') { eq.membros[Number(el.dataset.mi)].nome = el.value; salvarEq(); } };
@@ -795,7 +805,10 @@ async function telaEquipe() {
   });
   $('#lockMin').onchange = e => { const x = lockCfg(); x.minutos = Number(e.target.value); LS.set(uidKey('lock'), x); toast('Ajuste salvo'); };
   $('#expira').onchange = e => { const x = cfg(); x.expira = Number(e.target.value); LS.set(uidKey('config'), x); toast('Ajuste salvo'); };
-  $('#instalar').onclick = () => { if (promptInstalar) { promptInstalar.prompt(); promptInstalar = null; } else toast('Use o menu do navegador para instalar.'); };
+  $('#instalar').onclick = async () => {
+    if (promptInstalar) { promptInstalar.prompt(); const r = await promptInstalar.userChoice.catch(() => ({})); promptInstalar = null; if (r.outcome === 'accepted') toast('Instalando...'); return; }
+    confirmar(instrucoesInstalar(), 'Entendi', true);
+  };
   $('#recarregar').onclick = async () => { try { await carregarConteudo(true); toast('Modelos atualizados'); telaEquipe(); } catch { toast('Não foi possível atualizar agora'); } };
   if ($('#sair')) $('#sair').onclick = () => sairConta();
   $('#enviarLocal').onclick = async () => {
@@ -1004,7 +1017,9 @@ function telaLogin(modo = 'entrar', msg = '') {
     <div class="actions" style="justify-content:space-between">
       <button class="btn sm" id="ltroca">${cad ? 'Já tenho acesso' : 'Solicitar acesso'}</button>
       ${cad ? '' : '<button class="btn sm" id="lesq">Esqueci a senha</button>'}</div>
-    <p class="aviso">Após a solicitação, o administrador precisa aprovar seu acesso.</p></div>`;
+    <p class="aviso">Após a solicitação, o administrador precisa aprovar seu acesso.</p>
+    <button class="btn sm" id="linstalar" style="display:block;margin:6px auto 0">📲 Como instalar no celular</button></div>`;
+  $('#linstalar').onclick = async () => { if (promptInstalar) { promptInstalar.prompt(); promptInstalar = null; } else confirmar(instrucoesInstalar(), 'Entendi', true); };
   $('#ltroca').onclick = () => telaLogin(cad ? 'entrar' : 'cadastro');
   if ($('#lesq')) $('#lesq').onclick = async () => { const em = $('#lemail').value.trim(); if (!em) { toast('Digite seu e-mail acima'); return; } try { await auth.sendPasswordResetEmail(em); toast('E-mail de redefinição enviado'); } catch (e) { toast(erroAuth(e)); } };
   $('#flog').onsubmit = async e => {
