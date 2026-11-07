@@ -207,6 +207,13 @@ textarea.code{width:100%;min-height:360px;font:12.5px/1.45 ui-monospace,Menlo,Co
 [data-tema=escuro] .flash.virado{background:#16233a;border-color:#2c3d55}
 .aviso{font-size:12.5px;color:var(--mut);text-align:center;margin:18px 6px 0}
 @media (min-width:700px){.grid{grid-template-columns:1fr 1fr}}
+.micf{position:fixed;right:16px;bottom:calc(132px + env(safe-area-inset-bottom));z-index:40;width:54px;height:54px;border-radius:50%;border:0;background:var(--navy);color:#fff;font-size:24px;box-shadow:0 6px 18px rgba(0,0,0,.25);display:none;cursor:pointer}.micf.show{display:block}.micf.rec{background:var(--red);animation:pul 1s infinite}@keyframes pul{50%{transform:scale(1.08)}}
+.valmsg{font-size:12.5px;color:#9a5b00;background:var(--warnbg);border-radius:8px;padding:5px 8px;margin-top:4px}
+.rev{border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:14px;border:1px solid var(--ln)}.rev summary{font-weight:700;cursor:pointer}.rev.red{background:var(--redbg)}.rev.warn{background:var(--warnbg)}.rev.okb{background:var(--okbg)}.rev ul{margin:8px 0 0;padding-left:4px;list-style:none}.rev li{margin:4px 0;line-height:1.4}.rev li.red{font-weight:600}
+.camwrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;margin:8px 0}.camwrap video{width:100%;height:100%;object-fit:cover;display:block}.camwrap .guia{position:absolute;left:12%;right:12%;top:38%;height:24%;border:3px solid var(--gold);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}.camdlg .dlgbox{max-width:440px}.camdlg label.btn{cursor:pointer}
+.nav a{position:relative}.nav .nb{position:absolute;top:2px;right:calc(50% - 22px);background:var(--red);color:#fff;font-style:normal;font-size:10.5px;font-weight:700;border-radius:99px;min-width:17px;height:17px;line-height:17px;padding:0 4px;text-align:center}
+[data-tema=escuro] .valmsg{color:#ffd58a}
+@media print{.micf{display:none!important}}
 </style>
 </head>
 <body>
@@ -217,9 +224,9 @@ textarea.code{width:100%;min-height:360px;font:12.5px/1.45 ui-monospace,Menlo,Co
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js?v=4.0.0"></script>
-<script src="municipios.js?v=4.0.0"></script>
-<script src="legis.js?v=4.0.0"></script>
-<script src="app.js?v=4.0.0"></script>
+<script src="firebase-config.js?v=5.0.0"></script>
+<script src="municipios.js?v=5.0.0"></script>
+<script src="legis.js?v=5.0.0"></script>
+<script src="app.js?v=5.0.0"></script>
 </body>
 </html>

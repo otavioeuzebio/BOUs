@@ -39,6 +39,17 @@ service cloud.firestore {
       allow read, update, delete: if admin();
     }
 
+    // Histórico de versões dos modelos (só administrador).
+    match /conteudo_hist/{id} {
+      allow read, write: if admin();
+    }
+
+    // Convites por turma/unidade: quem tem o código consegue conferi-lo no cadastro; só o administrador lista e altera.
+    match /convites/{codigo} {
+      allow get: if true;
+      allow list, write: if admin();
+    }
+
     // Estatística de uso (só contadores por tipo de ocorrência, sem dados pessoais).
     match /stats/{mes} {
       allow read: if admin();

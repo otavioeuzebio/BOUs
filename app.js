@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 
-const VERSAO = '4.0.0';
+const VERSAO = '5.0.0';
 const $ = s => document.querySelector(s);
 const app = $('#app'), top = $('#top');
 const PH_A = '⟦', PH_B = '⟧';
@@ -36,7 +36,7 @@ const LS = {
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
 const uidKey = k => `bou.${usuario ? usuario.uid : 'local'}.${k}`;
-const cfg = () => LS.get(uidKey('config'), { expira: 7, estilo: 'cron' });
+const cfg = () => LS.get(uidKey('config'), { expira: 1, estilo: 'cron' });
 const turno = () => LS.get(uidKey('equipe'), { equipe: '', vtr: '', opm: '', municipio: '' });
 const frases = () => LS.get(uidKey('frases'), []);
 function rascunhos() {
@@ -326,7 +326,9 @@ function campoHTML(c, obj, scope) {
     const dl = ops.length ? `list="dl-${scope}-${c.id}"` : '';
     inp = `<input type="${ty}" ${ty === 'number' ? 'inputmode="decimal"' : ''} ${k} ${dl} autocomplete="off" value="${esc(v || '')}" placeholder="${esc(c.ph || '')}">${ops.length ? `<datalist id="dl-${scope}-${c.id}">${ops.map(o => `<option value="${esc(o)}">`).join('')}</datalist>` : ''}`;
   }
-  const ag = c.agora ? `<button type="button" class="mini" data-agora="${c.id}" data-ms="${scope}">agora</button>` : '';
+  const ag = (c.agora ? `<button type="button" class="mini" data-agora="${c.id}" data-ms="${scope}">agora</button>` : '') + (ehCampoPlaca(c) && navigator.mediaDevices ? `<button type="button" class="mini" data-cam="${c.id}" data-ms="${scope}">📷 ler placa</button>` : '');
+  const vm = validarCampo(c, v);
+  inp += `<div class="valmsg" data-vm="${scope}|${c.id}" ${vm ? '' : 'hidden'}>⚠ ${esc(vm)}</div>`;
   const sug = !filled(v) && c.t !== 'date' && c.t !== 'time' ? sugestoes(c, obj) : [];
   const sugHTML = sug.length ? `<div class="sug">${sug.map(x => `<button type="button" data-sug="${esc(x)}" data-ms="${scope}" data-sk="${c.id}">${esc(x)}</button>`).join('')}</div>` : '';
   return `<div class="f"><label>${esc(c.l)}${mic}${ag}</label>${inp}${sugHTML}${help}</div>`;
@@ -365,6 +367,7 @@ function setNav(n) {
   const nav = $('#nav'); nav.hidden = false;
   nav.innerHTML = `<a href="#inicio" data-n="home"><span>📋</span>Ocorrências</a><a href="#rascunhos" data-n="rasc"><span>📝</span>Rascunhos</a><a href="#estudo" data-n="estudo"><span>📚</span>Estudo</a><a href="#equipe" data-n="equipe"><span>👮</span>Turno</a>${ehAdmin() ? '<a href="#admin" data-n="admin"><span>🛡️</span>Admin</a>' : ''}`;
   nav.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.n === n));
+  if (ehAdmin()) marcarPendNav();
 }
 function semNav() { $('#nav').hidden = true; document.querySelectorAll('.fab').forEach(f => f.remove()); }
 
@@ -470,8 +473,8 @@ function abaModelo(c0) {
   html += `<div class="card" id="saida"><h3>📄 Descrição sumária</h3>
     <div class="estilos">${ESTILOS.map(e => `<button data-estilo="${e.id}" class="${(R.estilo || 'cron') === e.id ? 'on' : ''}" title="${esc(e.d)}">${esc(e.nome)}</button>`).join('')}</div>
     <div class="sumhint" id="estiloDesc" style="margin:6px 0 8px">${esc((ESTILOS.find(e => e.id === (R.estilo || 'cron')) || ESTILOS[0]).d)}</div>
-    <div class="out" id="out"></div><div class="pend" id="pend"></div>
-    <div class="actions"><button class="btn pri" id="copiar">Copiar texto</button>${navigator.share && window.top === window ? '<button class="btn" id="compart">Compartilhar</button>' : ''}<button class="btn" id="editar">${R.editado != null ? 'Voltar ao automático' : 'Editar à mão'}</button><button class="btn" id="qrPassar">📤 Passar por QR</button><button class="btn red" id="limpar">Novo BO</button></div></div>`;
+    <div id="revisor"></div><div class="out" id="out"></div><div class="pend" id="pend"></div>
+    <div class="actions"><button class="btn pri" id="copiar">Copiar texto</button>${navigator.share && window.top === window ? '<button class="btn" id="compart">Compartilhar</button>' : ''}<button class="btn" id="editar">${R.editado != null ? 'Voltar ao automático' : 'Editar à mão'}</button><button class="btn" id="whats">💬 WhatsApp</button><button class="btn" id="pdf">🖨️ PDF</button><button class="btn" id="qrPassar">📤 Passar por QR</button><button class="btn red" id="limpar">Novo BO</button></div></div>`;
   c.innerHTML = html;
   document.querySelectorAll('.fab').forEach(f => f.remove());
   const fab = document.createElement('button'); fab.className = 'fab'; fab.textContent = '📄 Ver texto';
@@ -498,6 +501,7 @@ function atualizarSaida() {
     const p = $('#pend'); p.className = 'pend' + (n ? '' : ' ok');
     p.textContent = n ? `⚠ ${n} informação(ões) pendente(s) destacada(s) no texto.` : '✓ Sem lacunas no texto. Revise antes de lançar.';
   }
+  const rv = $('#revisor'); if (rv) { const aberto = rv.querySelector('details') ? rv.querySelector('details').open : null; rv.innerHTML = revisorHTML(revisar()); if (aberto !== null) rv.querySelector('details').open = aberto; }
   const lst = checklist(T, R), pend = lst.filter(x => !x.feito).length;
   const b = document.querySelector('[data-aba="check"] .badge'); if (b) { b.textContent = pend || '✓'; b.className = 'badge' + (pend ? '' : ' ok'); }
 }
@@ -522,7 +526,10 @@ function ligarModelo(c) {
     const el = e.target; if (!el.dataset || !el.dataset.k || el.type === 'checkbox' || el.tagName === 'SELECT') return;
     let v = el.value;
     if (el.dataset.k === 'cep') { v = v.replace(/\D/g, '').slice(0, 8); if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5); el.value = v; }
+    if (el.dataset.k === 'placa') { const p = v.toUpperCase(); if (p !== v) { const pos = el.selectionStart; el.value = v = p; try { el.setSelectionRange(pos, pos); } catch {} } }
     objDe(el.dataset.s)[el.dataset.k] = v;
+    const vmEl = c.querySelector(`[data-vm="${el.dataset.s}|${el.dataset.k}"]`);
+    if (vmEl) { const m = validarCampo(campoDef(el.dataset.s, el.dataset.k), v); vmEl.hidden = !m; vmEl.textContent = m ? '⚠ ' + m : ''; }
     if (el.dataset.k === 'cep' && v.length === 9) buscarCep();
     mudou(false);
   });
@@ -543,6 +550,7 @@ function ligarModelo(c) {
     if (b.dataset.sug !== undefined) { objDe(b.dataset.ms)[b.dataset.sk] = b.dataset.sug; mudou(true); return; }
     if (b.dataset.agora) { objDe(b.dataset.ms)[b.dataset.agora] = agora(); mudou(true); return; }
     if (b.dataset.mic) { ditar(b); return; }
+    if (b.dataset.cam) { placaNoCampo(b.dataset.ms, b.dataset.cam); return; }
     if (b.dataset.cenario) { R.d.cenario = b.dataset.cenario; mudou(true); return; }
     if (b.dataset.estilo) { R.estilo = b.dataset.estilo; const cf = cfg(); cf.estilo = R.estilo; LS.set(uidKey('config'), cf); agendarSalvar(); c.querySelectorAll('[data-estilo]').forEach(x => x.classList.toggle('on', x === b)); $('#estiloDesc').textContent = ESTILOS.find(x => x.id === R.estilo).d; atualizarSaida(); return; }
     if (b.dataset.add) { R.mods.push({ tipo: b.dataset.add, m: {} }); toast(`${MODULOS[b.dataset.add].nome} adicionado`); mudou(true); return; }
@@ -560,10 +568,10 @@ function ligarModelo(c) {
   });
   $('#copiar').onclick = async () => {
     const txt = textoFinal();
-    const n = (txt.match(/\[[^\]]+\]/g) || []).length;
-    const falt = checklist(T, R).filter(x => !x.feito && x.auto === false).map(x => x.t);
-    if ((R.editado == null && n) || falt.length) {
-      const msg = `${R.editado == null && n ? `<p>Há <b>${n}</b> lacuna(s) [entre colchetes] no texto.</p>` : ''}${falt.length ? `<p>Itens indispensáveis não preenchidos:</p><ul>${falt.slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}<p>Copiar mesmo assim?</p>`;
+    const rv = revisar(), red = rv.filter(x => x.n === 'red');
+    if (red.length || rv.length > 2) {
+      const lst = [...red, ...rv.filter(x => x.n !== 'red')].slice(0, 8);
+      const msg = `<p><b>${red.length ? '🔴 Revisão encontrou problemas' : '🟡 Revisão encontrou avisos'}</b></p><ul>${lst.map(x => `<li>${x.n === 'red' ? '⛔' : '⚠'} ${esc(x.t)}</li>`).join('')}</ul>${rv.length > lst.length ? `<p class="sumhint">+${rv.length - lst.length} outro(s)</p>` : ''}<p>Copiar mesmo assim?</p>`;
       if (!await confirmar(msg, 'Copiar', true)) return;
     }
     try { await navigator.clipboard.writeText(txt); toast('Texto copiado ✓'); }
@@ -577,6 +585,8 @@ function ligarModelo(c) {
     agendarSalvar(); rerender(); if (R.editado != null) $('#saida').scrollIntoView();
   };
   $('#qrPassar').onclick = () => passarQR(R);
+  $('#whats').onclick = () => { registrarUso(T.id); whatsDescricao(); };
+  $('#pdf').onclick = () => { registrarUso(T.id); pdfDescricao(); };
   $('#limpar').onclick = async () => { if (!await confirmar('Começar um novo BO deste tipo? O atual fica salvo em Rascunhos.', 'Novo BO')) return; salvarRascunho(R); R = novoRascunho(T); geraisOpen = null; try { sessionStorage.removeItem('bou.atual'); } catch {} desenharTipo(); window.scrollTo(0, 0); };
 }
 
@@ -610,7 +620,8 @@ function usarGPS(btn) {
       R.d.municipio = a.city || a.town || a.village || a.municipality || R.d.municipio || '';
       if (a.postcode) R.d.cep = a.postcode;
       R.d.coords = `${la.toFixed(6)}, ${lo.toFixed(6)}`;
-      toast('Endereço aproximado preenchido — confira o número');
+      const prec = Math.round(pos.coords.accuracy || 0);
+      toast(prec > 60 ? `Endereço aproximado (precisão ~${prec} m) — confira rua e número` : 'Endereço preenchido pelo GPS — confira o número');
     } catch { R.d.referencia = `coordenadas ${la.toFixed(6)}, ${lo.toFixed(6)}`; toast('Sem conexão: coordenadas registradas na referência'); }
     agendarSalvar(); rerender();
   }, () => { toast('Não foi possível obter a localização (permita o GPS)'); btn.disabled = false; btn.textContent = '📍 Estou no local'; }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
@@ -650,7 +661,7 @@ function abaDicas(c) {
 }
 
 function telaRascunhos() {
-  setTop('Rascunhos', `Só neste aparelho • apagados após ${cfg().expira || '∞'} dia(s)`);
+  setTop('Rascunhos', `Só neste aparelho • ${Number(cfg().expira) ? 'apagados após ' + (Number(cfg().expira) < 1 ? Math.round(cfg().expira * 24) + ' horas' : cfg().expira + ' dia(s)') : 'sem apagamento automático'}`);
   setNav('rasc');
   const r = rascunhos().filter(x => tipoPorId(x.tipo));
   if (!r.length) { app.innerHTML = '<div class="empty">Nenhum rascunho.<br><br>Os BOs que você preencher ficam salvos aqui automaticamente.</div>'; return; }
@@ -775,6 +786,7 @@ async function sairConta(semPerguntar) {
   }
   if (limpar) ['rascunhos', 'frases', 'conteudo', 'hist'].forEach(k => LS.del(uidKey(k)));
   try { sessionStorage.clear(); } catch {}
+  if (pendUnsub) { pendUnsub(); pendUnsub = null; pendIds = null; }
   R = null; await auth.signOut();
 }
 
@@ -815,7 +827,7 @@ async function telaEquipe() {
     <div class="f" style="margin-top:10px"><label>Bloquear após ficar em segundo plano por</label><select id="lockMin">${[1, 5, 15, 30].map(v => `<option value="${v}" ${Number(lk.minutos) === v ? 'selected' : ''}>${v} min</option>`).join('')}</select></div>
     <div class="sumhint">Protege nomes de vítimas e envolvidos guardados no aparelho.</div></div>
   <div class="card"><h3>🔒 Privacidade</h3>
-    <div class="f"><label>Apagar rascunhos automaticamente após</label><select id="expira">${[['1', '1 dia'], ['3', '3 dias'], ['7', '7 dias'], ['15', '15 dias'], ['30', '30 dias'], ['0', 'nunca']].map(([v, l]) => `<option value="${v}" ${String(cf.expira) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="f"><label>Apagar rascunhos automaticamente após</label><select id="expira">${[['0.5', '12 horas'], ['1', '1 dia'], ['3', '3 dias'], ['7', '7 dias'], ['15', '15 dias'], ['30', '30 dias'], ['0', 'nunca']].map(([v, l]) => `<option value="${v}" ${String(cf.expira) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="sumhint">Rascunhos e frases ficam apenas neste aparelho.</div></div>
   <div class="card"><h3>👤 Conta</h3><p style="margin:0 0 10px;font-size:14px">${esc(perfil ? [ABREV[perfil.grad] || perfil.grad, perfil.nome].filter(Boolean).join(' ') : '')}<br><span class="sumhint">${esc(usuario ? usuario.email : 'modo local (sem Firebase)')}${perfil && perfil.validade ? ' • acesso até ' + new Date(perfil.validade).toLocaleDateString('pt-BR') : ''}</span></p>
     <div class="actions"><button class="btn" id="recarregar">Atualizar modelos</button>${usuario ? '<button class="btn red" id="sair">Sair</button>' : ''}</div></div>
@@ -1051,7 +1063,7 @@ function rodarSimulado(sim) {
   let e = 0, pts = 0;
   const area = $('#eArea');
   const passo = () => {
-    if (e >= sim.etapas.length) { area.innerHTML = `<div class="card" style="text-align:center"><div style="font-size:42px">${pts === sim.etapas.length ? '🏆' : '📖'}</div><h3 style="justify-content:center">${pts} de ${sim.etapas.length} decisões corretas</h3><div class="actions" style="justify-content:center"><a class="btn" href="#t-${sim.tipo}">Ver a ficha</a><button class="btn pri" id="simVolta">Outros simulados</button></div></div>`; $('#simVolta').onclick = listaSimulados; return; }
+    if (e >= sim.etapas.length) { area.innerHTML = `<div class="card" style="text-align:center"><div style="font-size:42px">${pts === sim.etapas.length ? '🏆' : '📖'}</div><h3 style="justify-content:center">${pts} de ${sim.etapas.length} decisões corretas</h3><div class="actions" style="justify-content:center">${sim.redacao ? '<button class="btn gold" id="simRed">✍️ Treinar a descrição</button>' : ''}<a class="btn" href="#t-${sim.tipo}">Ver a ficha</a><button class="btn pri" id="simVolta">Outros simulados</button></div></div>`; $('#simVolta').onclick = listaSimulados; if ($('#simRed')) $('#simRed').onclick = () => redacaoSimulado(sim); return; }
     const et = sim.etapas[e];
     const ops = embaralhar(et.o);
     area.innerHTML = `<div class="card"><div class="sumhint">${esc(sim.titulo)} • etapa ${e + 1} de ${sim.etapas.length}</div><p style="font-size:15.5px;line-height:1.5">${esc(et.n)}</p><div class="sumhint">O que você faz?</div><div class="qops">${ops.map((o, k) => `<button data-op="${k}">${esc(o.t)}</button>`).join('')}</div><div id="simFb"></div></div>`;
@@ -1064,6 +1076,23 @@ function rodarSimulado(sim) {
     });
   };
   passo();
+}
+
+function redacaoSimulado(sim) {
+  const area = $('#eArea');
+  area.innerHTML = `<div class="card"><div class="sumhint">${esc(sim.titulo)} • treino de redação</div><p><b>${esc(sim.redacao.pedido)}</b></p><p class="sumhint">Escreva como lançaria no BOU (pode ditar com 🎤). Depois compare com os elementos que não podem faltar.</p>
+    <textarea id="simTxt" style="width:100%;min-height:180px;border:1px solid var(--ln);border-radius:10px;padding:10px;font:inherit">${esc(LS.get('bou.simtxt.' + sim.id, ''))}</textarea>
+    <div class="actions"><button class="btn pri" id="simComp">Comparar</button><button class="btn" id="simVolta2">Voltar</button></div><div id="simRes"></div></div>`;
+  $('#simTxt').oninput = e => LS.set('bou.simtxt.' + sim.id, e.target.value);
+  $('#simVolta2').onclick = listaSimulados;
+  $('#simComp').onclick = () => {
+    const txt = $('#simTxt').value.trim(); if (txt.length < 40) { toast('Escreva a descrição primeiro'); return; }
+    const { res, termos } = compararRedacao(sim, txt), ok = res.filter(x => x.ok).length;
+    $('#simRes').innerHTML = `<h3 style="margin-top:14px">${ok === res.length ? '🏆' : ok >= res.length * .7 ? '👍' : '📖'} ${ok} de ${res.length} elementos</h3>
+      <ul class="cl">${res.map(x => `<li><span class="st ${x.ok ? 'ok' : 'no'}">${x.ok ? '✓' : '!'}</span><div class="${x.ok ? 'done' : ''}">${esc(x.t)}<small>${x.ok ? 'presente' : 'faltou'}</small></div></li>`).join('')}</ul>
+      ${termos.length ? `<div class="av warn">⚠ Termos a evitar: ${termos.map(esc).join(' • ')}</div>` : ''}
+      <details class="extras" style="margin-top:10px"><summary>Ver um modelo de resposta</summary><div class="out" style="margin-top:8px">${esc(sim.redacao.modelo || '')}</div></details>`;
+  };
 }
 
 /* ------------------------- novidades ------------------------- */
@@ -1083,7 +1112,7 @@ async function telaAdmin() {
   setNav('admin');
   if (!TEM_FIREBASE) { app.innerHTML = '<div class="empty">Firebase não configurado.</div>'; return; }
   app.innerHTML = '<div class="empty">Carregando...</div>';
-  let users = [], cont = {}, sugs = [], locs = [], stats = {};
+  let users = [], cont = {}, sugs = [], locs = [], stats = {}, convs = [];
   const mes = hoje().slice(0, 7);
   const ant = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
   try {
@@ -1093,6 +1122,7 @@ async function telaAdmin() {
   const regrasVelhas = [];
   try { sugs = (await db.collection('sugestoes').get()).docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => b.criado - a.criado); } catch { regrasVelhas.push('sugestões'); }
   try { locs = (await db.collection('locais').where('status', '==', 'sugerido').get()).docs.map(x => ({ id: x.id, ...x.data() })); } catch { regrasVelhas.push('contatos'); }
+  try { convs = (await db.collection('convites').get()).docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => (b.criado || 0) - (a.criado || 0)); } catch { regrasVelhas.push('convites'); }
   try { for (const m of [mes, ant]) { const s = await db.collection('stats').doc(m).get(); stats[m] = s.exists ? s.data() : {}; } } catch { regrasVelhas.push('estatísticas'); }
   const ordem = { pendente: 0, ativo: 1, bloqueado: 2 };
   users.sort((a, b) => (ordem[a.status] ?? 3) - (ordem[b.status] ?? 3) || (a.nome || '').localeCompare(b.nome || ''));
@@ -1104,7 +1134,7 @@ async function telaAdmin() {
     const eu = usuario && u.uid === usuario.uid;
     const val = u.validade ? new Date(u.validade - 3 * 36e5).toISOString().slice(0, 10) : '';
     return `<div class="card ucard st-${esc(venc(u) ? 'bloqueado' : u.status)}" data-uid="${u.uid}">
-      <div class="uhead"><div><b>${esc([ABREV[u.grad] || u.grad, u.nome].filter(Boolean).join(' ') || '(sem nome)')}</b><br><span class="sumhint">${esc(u.email || '')}${u.opm ? ' • ' + esc(u.opm) : ''}${u.rg ? ' • RG ' + esc(u.rg) : ''}</span></div><span class="stag">${venc(u) ? 'expirado' : esc(u.status)}</span></div>
+      <div class="uhead"><div><b>${esc([ABREV[u.grad] || u.grad, u.nome].filter(Boolean).join(' ') || '(sem nome)')}</b><br><span class="sumhint">${esc(u.email || '')}${u.opm ? ' • ' + esc(u.opm) : ''}${u.rg ? ' • RG ' + esc(u.rg) : ''}${u.turma ? ' • 🎟️ ' + esc(u.turma) : ''}</span></div><span class="stag">${venc(u) ? 'expirado' : esc(u.status)}</span></div>
       <div class="chips" style="margin:10px 0">${['ativo', 'pendente', 'bloqueado'].map(s => `<button data-st="${s}" class="${u.status === s ? 'on' : ''}" ${eu ? 'disabled' : ''}>${{ ativo: '✓ Aprovado', pendente: '⏳ Pendente', bloqueado: '⛔ Bloqueado' }[s]}</button>`).join('')}</div>
       <details ${u.status === 'pendente' ? 'open' : ''}><summary class="sumhint">Permissões e prazo</summary>
         <div class="perms">${cats.map(cid => `<label class="chk"><input type="checkbox" data-cat="${cid}" ${p.cats.includes(cid) ? 'checked' : ''}><span>${esc(NOMES_CAT[cid])}</span></label>`).join('')}
@@ -1122,14 +1152,25 @@ async function telaAdmin() {
   const abertas = sugs.filter(s => s.status !== 'resolvida');
   app.innerHTML = `${regrasVelhas.length ? `<div class="alerta"><b>⚠ Regras do Firestore desatualizadas</b>Não foi possível ler: ${regrasVelhas.join(', ')}. Publique o arquivo firestore.rules novo no Console do Firebase (veja o README).</div>` : ''}
     <div class="card"><h3>👥 Usuários <span class="sumhint">${users.length} cadastrado(s)${pend ? ` • <b style="color:var(--red)">${pend} aguardando</b>` : ''}</span></h3>
-      <div class="search" style="margin:0"><span>🔎</span><input id="qu" type="search" placeholder="Buscar nome, e-mail, OPM..."></div></div>
+      <div class="search" style="margin:0"><span>🔎</span><input id="qu" type="search" placeholder="Buscar nome, e-mail, OPM, turma..."></div>
+      ${'Notification' in window ? `<button class="btn sm" id="notif" style="margin-top:8px">${Notification.permission === 'granted' ? '🔔 Avisos de pedidos ativos neste aparelho' : '🔔 Avisar neste aparelho quando alguém pedir acesso'}</button>` : ''}</div>
     <div id="ulist">${users.map(cardU).join('')}</div>
     <details class="card" ${abertas.length ? 'open' : ''}><summary>💬 Sugestões de correção <span class="sumhint">${abertas.length} aberta(s)</span></summary>
       ${sugs.length ? sugs.slice(0, 40).map(s => `<div class="sugitem ${s.status === 'resolvida' ? 'feito' : ''}" data-sid="${s.id}"><div class="sumhint">${esc(s.tipoNome || s.tipo)} • ${esc(s.nome || s.email)} • ${fmtQuando(s.criado)}</div><div>${esc(s.texto)}</div><div class="actions"><button class="btn sm" data-sres>${s.status === 'resolvida' ? 'Reabrir' : '✓ Resolvida'}</button><button class="btn red sm" data-sdel>Apagar</button></div></div>`).join('') : '<div class="sumhint">Nenhuma sugestão.</div>'}</details>
     <details class="card" ${locs.length ? 'open' : ''}><summary>📞 Contatos por município <span class="sumhint">${locs.length} aguardando aprovação</span></summary>
       ${locs.map(l => `<div class="sugitem" data-lid="${l.id}"><div><b>${esc(l.tipo)}</b> — ${esc(l.nome)} <span class="sumhint">(${esc(l.municipio)})</span></div><div class="sumhint">${esc([l.telefone, l.endereco].filter(Boolean).join(' • '))} • sugerido por ${esc(l.porNome || '')}</div><div class="actions"><button class="btn sm gold" data-lok>Aprovar</button><button class="btn red sm" data-ldel>Recusar</button></div></div>`).join('')}
       <details style="margin-top:8px"><summary class="sumhint" style="cursor:pointer">＋ Adicionar contato aprovado</summary>${formLocalHTML(turno().municipio)}<button class="btn gold sm" id="addLocal">Adicionar</button></details></details>
-    <details class="card"><summary>📊 Uso do app</summary><h3 style="margin-top:10px">Este mês</h3>${usoHTML(mes)}<h3 style="margin-top:14px">Mês anterior</h3>${usoHTML(ant)}</details>
+    <details class="card" ${convs.some(cv => users.some(u => u.convite === cv.id && u.status === 'pendente')) ? 'open' : ''}><summary>🎟️ Convites por turma/unidade <span class="sumhint">${convs.length} código(s)</span></summary>
+      <p class="sumhint">Quem se cadastra com o código já fica marcado com a turma. Você aprova todos de uma vez, com as permissões e o prazo do convite.</p>
+      ${convs.map(cv => { const us = users.filter(u => u.convite === cv.id), pe = us.filter(u => u.status === 'pendente'); return `<div class="sugitem" data-cv="${cv.id}"><div><b>${esc(cv.nome)}</b> <span class="stag">${cv.ativo ? 'ativo' : 'desativado'}</span></div><div class="sumhint">Código <b style="letter-spacing:2px">${cv.id}</b> • ${us.length} cadastrado(s) • ${pe.length} pendente(s)${cv.validade ? ' • acesso até ' + new Date(cv.validade).toLocaleDateString('pt-BR') : ''}</div><div class="actions"><button class="btn sm gold" data-cvok ${pe.length ? '' : 'disabled'}>✓ Aprovar pendentes (${pe.length})</button><button class="btn sm" data-cvcp>📋 Copiar convite</button><button class="btn sm" data-cvat>${cv.ativo ? 'Desativar' : 'Reativar'}</button><button class="btn sm red" data-cvdel>Apagar</button></div></div>`; }).join('') || '<div class="sumhint">Nenhum convite criado.</div>'}
+      <details style="margin-top:8px"><summary class="sumhint" style="cursor:pointer">＋ Novo convite</summary>
+        <div class="f"><label>Turma ou unidade</label><input type="text" id="cvNome" placeholder="CFO 2º ano — Pelotão Alfa"></div>
+        <div class="f"><label>OPM (preenche o cadastro de quem não informar)</label><input type="text" id="cvOpm" placeholder="APMG"></div>
+        <div class="perms">${cats.map(cid => `<label class="chk"><input type="checkbox" data-cvcat="${cid}" checked><span>${esc(NOMES_CAT[cid])}</span></label>`).join('')}</div>
+        <div class="f"><label>Acesso válido até (vazio = sem prazo)</label><input type="date" id="cvVal"></div>
+        <button class="btn gold sm" id="cvCriar">Criar código</button></details></details>
+    <details class="card"><summary>📊 Uso do app</summary><h3 style="margin-top:10px">Este mês</h3>${usoHTML(mes)}<h3 style="margin-top:14px">Mês anterior</h3>${usoHTML(ant)}
+      <div class="actions" style="align-items:center"><select id="relMes" style="padding:8px;border:1px solid var(--ln);border-radius:10px">${Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }).map(m => `<option value="${m}">${m.slice(5)}/${m.slice(0, 4)}</option>`).join('')}</select><button class="btn sm gold" id="relPdf">📄 Relatório do mês (PDF)</button></div></details>
     <details class="card"><summary>🏛️ Frases da unidade <span class="sumhint">${(cont.base && cont.base.frasesUnidade || []).length} cadastrada(s)</span></summary>
       <p class="sumhint">Aparecem para todos os usuários no campo "Informações complementares".</p>
       <div id="fuLista">${(cont.base && cont.base.frasesUnidade || []).map((f, i) => `<div class="envrow"><div style="font-size:14px">${esc(f)}</div><button class="frx" data-furm="${i}">×</button></div>`).join('')}</div>
@@ -1149,8 +1190,9 @@ async function telaAdmin() {
         <div class="search" style="margin:0 0 8px"><span>🔎</span><input id="edBusca" type="search" placeholder="Localizar texto no arquivo..."></div>
         <textarea id="edTxt" spellcheck="false" class="code"></textarea>
         <div class="actions"><button class="btn" id="edValidar">Validar</button><button class="btn pri" id="edPublicar">Publicar alterações</button></div>
-        <p class="sumhint">Altere só os textos entre aspas/crases. Antes de publicar, o app confere se o arquivo continua funcionando.</p></details></div>`;
-  $('#qu').oninput = e => { const t = norm(e.target.value); app.querySelectorAll('.ucard').forEach(el => { const u = users.find(x => x.uid === el.dataset.uid); el.hidden = t && !norm(`${u.nome} ${u.email} ${u.opm} ${u.rg} ${u.grad}`).includes(t); }); };
+        <p class="sumhint">Altere só os textos entre aspas/crases. Antes de publicar, o app confere se o arquivo continua funcionando.</p></details>
+      <details style="margin-top:12px" id="histBox"><summary class="sumhint" style="cursor:pointer">🕘 Histórico de versões (desfazer)</summary><div id="histLista" class="sumhint" style="margin-top:8px">Carregando…</div></details></div>`;
+  $('#qu').oninput = e => { const t = norm(e.target.value); app.querySelectorAll('.ucard').forEach(el => { const u = users.find(x => x.uid === el.dataset.uid); el.hidden = t && !norm(`${u.nome} ${u.email} ${u.opm} ${u.rg} ${u.grad} ${u.turma || ''}`).includes(t); }); };
   const salvarU = async (uid, dados, msg) => { try { await db.collection('usuarios').doc(uid).update(dados); toast(msg || 'Salvo'); } catch (e) { toast('Erro: ' + e.message); } };
   app.querySelectorAll('.ucard').forEach(el => {
     const uid = el.dataset.uid, u = users.find(x => x.uid === uid);
@@ -1180,6 +1222,9 @@ async function telaAdmin() {
     catch (err) { toast('Arquivo com erro: ' + err.message); return false; }
     if (!await confirmar(`Publicar ${lidos.map(x => x.id + '.js').join(', ')} para todos os usuários?`, 'Publicar')) return false;
     try {
+      const hb = db.batch(); let nh = 0;
+      lidos.forEach(x => { const a = cont[x.id]; if (a && a.js && a.js !== x.js) { nh++; hb.set(db.collection('conteudo_hist').doc(`${x.id}-v${a.versao || 0}`), { doc: x.id, versao: a.versao || 0, js: a.js, quando: a.atualizado || Date.now(), por: a.por || '' }); } });
+      if (nh) await hb.commit().catch(() => toast('Aviso: histórico não salvo (regras do Firestore desatualizadas)'));
       const batch = db.batch();
       lidos.forEach(x => batch.set(db.collection('conteudo').doc(x.id), { js: x.js, versao: ((cont[x.id] && cont[x.id].versao) || 0) + 1, atualizado: Date.now(), por: usuario.email }, { merge: true }));
       await batch.commit(); toast('Conteúdo publicado ✓');
@@ -1215,6 +1260,63 @@ async function telaAdmin() {
     }
     if (lidos.length) publicar(lidos);
   };
+  if ($('#notif')) $('#notif').onclick = async () => {
+    if (Notification.permission === 'denied') { toast('Avisos bloqueados — libere nas configurações do navegador'); return; }
+    const p = await Notification.requestPermission();
+    if (p === 'granted') { toast('Avisos ativados neste aparelho'); avisoSistema('Descritivo BOU', 'Você será avisado aqui quando alguém pedir acesso.'); $('#notif').textContent = '🔔 Avisos de pedidos ativos neste aparelho'; }
+  };
+  $('#cvCriar').onclick = async () => {
+    const nome = $('#cvNome').value.trim(); if (!nome) { toast('Informe a turma ou unidade'); return; }
+    const catsSel = [...app.querySelectorAll('[data-cvcat]')].filter(x => x.checked).map(x => x.dataset.cvcat);
+    const val = $('#cvVal').value ? new Date($('#cvVal').value + 'T23:59:59-03:00').getTime() : 0;
+    const cod = gerarCodigo();
+    try { await db.collection('convites').doc(cod).set({ nome, opm: $('#cvOpm').value.trim(), perms: { cats: catsSel }, validade: val, ativo: true, criado: Date.now(), por: usuario.email }); toast('Convite criado: ' + cod); telaAdmin(); }
+    catch (e) { toast('Erro: ' + e.message); }
+  };
+  app.querySelectorAll('[data-cv]').forEach(el => {
+    const cv = convs.find(x => x.id === el.dataset.cv);
+    el.querySelector('[data-cvok]').onclick = async () => {
+      const pe = users.filter(u => u.convite === cv.id && u.status === 'pendente');
+      if (!await confirmar(`<p>Aprovar ${pe.length} pedido(s) da turma <b>${esc(cv.nome)}</b>?</p><ul>${pe.slice(0, 15).map(u => `<li>${esc([ABREV[u.grad] || u.grad, u.nome].filter(Boolean).join(' ') || u.email)}</li>`).join('')}</ul>`, 'Aprovar todos', true)) return;
+      const b = db.batch(); pe.forEach(u => b.update(db.collection('usuarios').doc(u.uid), { status: 'ativo', perms: { ...PERMS_PADRAO, cats: (cv.perms && cv.perms.cats) || PERMS_PADRAO.cats, admin: false }, validade: cv.validade || 0 }));
+      try { await b.commit(); toast(`${pe.length} usuário(s) aprovado(s)`); telaAdmin(); } catch (e) { toast('Erro: ' + e.message); }
+    };
+    el.querySelector('[data-cvcp]').onclick = async () => {
+      const t = `Acesso ao app Descritivo BOU (${cv.nome}):\n1) Abra ${linkConvite(cv.id)}\n2) Toque em "Solicitar acesso" e preencha seus dados\n3) Código de convite: ${cv.id}`;
+      try { await navigator.clipboard.writeText(t); toast('Convite copiado — cole no grupo da turma'); } catch { confirmar(`<pre style="white-space:pre-wrap">${esc(t)}</pre>`, 'OK', true, true); }
+    };
+    el.querySelector('[data-cvat]').onclick = async () => { await db.collection('convites').doc(cv.id).update({ ativo: !cv.ativo }).catch(e => toast(e.message)); telaAdmin(); };
+    el.querySelector('[data-cvdel]').onclick = async () => { if (!await confirmar(`Apagar o convite ${cv.id}? Quem já se cadastrou continua na lista.`, 'Apagar')) return; await db.collection('convites').doc(cv.id).delete().catch(e => toast(e.message)); telaAdmin(); };
+  });
+  $('#relPdf').onclick = async () => {
+    const m = $('#relMes').value; const [a, mm] = m.split('-').map(Number); const pm = `${mm === 1 ? a - 1 : a}-${String(mm === 1 ? 12 : mm - 1).padStart(2, '0')}`;
+    let cur = {}, prev = {};
+    try { const x = await db.collection('stats').doc(m).get(); cur = x.exists ? x.data() : {}; const y = await db.collection('stats').doc(pm).get(); prev = y.exists ? y.data() : {}; } catch (e) { toast('Erro: ' + e.message); return; }
+    const ini = new Date(a, mm - 1, 1).getTime(), fim = new Date(a, mm, 1).getTime();
+    const ids = [...new Set([...Object.keys(cur), ...Object.keys(prev)])].sort((x, y) => (cur[y] || 0) - (cur[x] || 0));
+    const tot = ids.reduce((s, k) => s + (cur[k] || 0), 0), totP = ids.reduce((s, k) => s + (prev[k] || 0), 0);
+    const catDe = id => { const t = TIPOS.find(x => x.id === id); const c = t && CATEGORIAS.find(x => x.id === t.cat); return c ? c.nome : ''; };
+    const porCat = {}; ids.forEach(k => { const c = catDe(k) || 'Outros'; porCat[c] = (porCat[c] || 0) + (cur[k] || 0); });
+    const ativos = users.filter(u => u.status === 'ativo').length, novos = users.filter(u => u.criado >= ini && u.criado < fim).length;
+    const turmas = {}; users.filter(u => u.status === 'ativo').forEach(u => { const t = u.turma || u.opm || 'sem turma'; turmas[t] = (turmas[t] || 0) + 1; });
+    const var_ = (c, p) => p ? `${c >= p ? '+' : ''}${Math.round((c - p) / p * 100)}%` : (c ? 'novo' : '—');
+    imprimir(`Relatório ${m}`, `<h1>Relatório de uso — Descritivo BOU</h1><div class="m">Mês de referência: ${String(mm).padStart(2, '0')}/${a} • gerado em ${new Date().toLocaleString('pt-BR')} por ${esc([ABREV[perfil.grad] || perfil.grad, perfil.nome].filter(Boolean).join(' ') || usuario.email)}</div>
+      <table><tr><th>Indicador</th><th class="r">Valor</th></tr><tr><td>Descrições geradas (copiadas/compartilhadas)</td><td class="r"><b>${tot}</b> (${var_(tot, totP)} em relação ao mês anterior: ${totP})</td></tr><tr><td>Usuários aprovados</td><td class="r">${ativos}</td></tr><tr><td>Novos cadastros no mês</td><td class="r">${novos}</td></tr><tr><td>Pedidos aguardando aprovação</td><td class="r">${users.filter(u => u.status === 'pendente').length}</td></tr></table>
+      <h2 style="font-size:13pt;margin-top:16px">Por grupo de ocorrência</h2><table><tr><th>Grupo</th><th class="r">Qtd.</th><th class="r">%</th></tr>${Object.entries(porCat).sort((x, y) => y[1] - x[1]).map(([c, n]) => `<tr><td>${esc(c)}</td><td class="r">${n}</td><td class="r">${tot ? Math.round(n / tot * 100) : 0}%</td></tr>`).join('')}</table>
+      <h2 style="font-size:13pt;margin-top:16px">Por tipo de ocorrência</h2><table><tr><th>Ocorrência</th><th class="r">${String(mm).padStart(2, '0')}/${a}</th><th class="r">Mês anterior</th><th class="r">Variação</th></tr>${ids.map(k => `<tr><td>${esc(nomeTipo(k))}</td><td class="r">${cur[k] || 0}</td><td class="r">${prev[k] || 0}</td><td class="r">${var_(cur[k] || 0, prev[k] || 0)}</td></tr>`).join('') || '<tr><td colspan="4">Sem registros no mês.</td></tr>'}</table>
+      <h2 style="font-size:13pt;margin-top:16px">Usuários aprovados por turma/unidade</h2><table><tr><th>Turma/unidade</th><th class="r">Usuários</th></tr>${Object.entries(turmas).sort((x, y) => y[1] - x[1]).map(([t, n]) => `<tr><td>${esc(t)}</td><td class="r">${n}</td></tr>`).join('')}</table>
+      <div class="rod">Os números contam descrições copiadas, compartilhadas ou impressas no app. Nenhum dado de ocorrência ou de pessoa envolvida é armazenado no servidor.</div>`);
+  };
+  $('#histBox').addEventListener('toggle', async () => {
+    if (!$('#histBox').open || $('#histBox')._ok) return; $('#histBox')._ok = true;
+    let hs = [];
+    try { hs = (await db.collection('conteudo_hist').get()).docs.map(x => ({ id: x.id, ...x.data() })); } catch (e) { $('#histLista').textContent = 'Não foi possível ler o histórico (publique as regras novas do Firestore).'; return; }
+    const por = {}; hs.forEach(h => (por[h.doc] = por[h.doc] || []).push(h));
+    const apagar = []; Object.values(por).forEach(l => { l.sort((x, y) => y.versao - x.versao); l.splice(10).forEach(h => apagar.push(h.id)); });
+    if (apagar.length) { const b = db.batch(); apagar.forEach(id => b.delete(db.collection('conteudo_hist').doc(id))); b.commit().catch(() => {}); }
+    $('#histLista').innerHTML = Object.keys(por).length ? ARQS_CONTEUDO.filter(id => por[id]).map(id => `<div style="margin-bottom:8px"><b>${id}.js</b> <span class="sumhint">(atual: versão ${(cont[id] || {}).versao || '?'})</span>${por[id].map(h => `<div class="revrow"><div>versão ${h.versao} <span class="sumhint">• ${fmtQuando(h.quando)} • ${esc(h.por || '')} • ${Math.round((h.js || '').length / 1024)} KB</span></div><button class="btn sm" data-hrest="${esc(h.id)}">↩ Restaurar</button></div>`).join('')}</div>`).join('') : 'Ainda não há versões anteriores. Elas passam a ser guardadas a cada publicação (até 10 por arquivo).';
+    $('#histLista').querySelectorAll('[data-hrest]').forEach(b => b.onclick = () => { const h = hs.find(x => x.id === b.dataset.hrest); publicar([{ id: h.doc, js: h.js }]); });
+  });
   const carregaEd = () => { const id = $('#edArq').value; $('#edTxt').value = cont[id] ? cont[id].js : ''; };
   $('#editorBox').addEventListener('toggle', carregaEd, { once: true });
   $('#edArq').onchange = carregaEd;
@@ -1228,13 +1330,15 @@ function telaLogin(modo = 'entrar', msg = '') {
   semNav();
   setTop('Descritivo BOU', 'Acesso restrito a usuários autorizados');
   const cad = modo === 'cadastro';
+  const convURL = (new URLSearchParams(location.search).get('convite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   app.innerHTML = `<div class="login card">
     <img src="icons/icon-192.png" alt="" width="72" height="72" style="display:block;margin:4px auto 10px;border-radius:16px">
     <h3 style="justify-content:center">${cad ? 'Solicitar acesso' : 'Entrar'}</h3>
     ${msg ? `<div class="aviso2">${esc(msg)}</div>` : ''}
     <form id="flog">
       ${cad ? `<div class="f"><label>Posto / graduação</label>${gradSelect('id="lgrad" required')}</div><div class="f"><label>Nome completo</label><input type="text" id="lnome" required placeholder="Fulano de Tal"></div>
-      <div class="row2"><div class="f"><label>RG</label><input type="text" id="lrg" inputmode="numeric"></div><div class="f"><label>OPM / Unidade</label><input type="text" id="lopm" placeholder="APMG, 12º BPM..."></div></div>` : ''}
+      <div class="row2"><div class="f"><label>RG</label><input type="text" id="lrg" inputmode="numeric"></div><div class="f"><label>OPM / Unidade</label><input type="text" id="lopm" placeholder="APMG, 12º BPM..."></div></div>
+      <div class="f"><label>Código de convite (se recebeu da sua turma/unidade)</label><input type="text" id="lconv" value="${esc(convURL)}" maxlength="8" style="text-transform:uppercase;letter-spacing:2px" placeholder="ex.: K7P3QZ" autocomplete="off"></div>` : ''}
       <div class="f"><label>E-mail</label><input type="email" id="lemail" required autocomplete="email"></div>
       <div class="f"><label>Senha</label><input type="password" id="lsenha" required minlength="6" autocomplete="${cad ? 'new-password' : 'current-password'}"></div>
       <button class="btn pri" style="width:100%" type="submit">${cad ? 'Enviar solicitação' : 'Entrar'}</button>
@@ -1252,7 +1356,16 @@ function telaLogin(modo = 'entrar', msg = '') {
     const em = $('#lemail').value.trim(), se = $('#lsenha').value;
     const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
     try {
-      if (cad) { sessionStorage.setItem('bou.cad', JSON.stringify({ grad: $('#lgrad').value, nome: $('#lnome').value.trim(), rg: $('#lrg').value.trim(), opm: $('#lopm').value.trim() })); await auth.createUserWithEmailAndPassword(em, se); }
+      if (cad) {
+        const extra = { grad: $('#lgrad').value, nome: $('#lnome').value.trim(), rg: $('#lrg').value.trim(), opm: $('#lopm').value.trim() };
+        const cod = $('#lconv').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (cod) {
+          let cv = null; try { cv = await db.collection('convites').doc(cod).get(); } catch {}
+          if (!cv || !cv.exists || !cv.data().ativo) { toast('Código de convite inválido ou desativado — confira ou deixe em branco'); btn.disabled = false; return; }
+          extra.convite = cod; extra.turma = cv.data().nome || ''; if (!extra.opm) extra.opm = cv.data().opm || '';
+        }
+        sessionStorage.setItem('bou.cad', JSON.stringify(extra)); await auth.createUserWithEmailAndPassword(em, se);
+      }
       else await auth.signInWithEmailAndPassword(em, se);
     } catch (err) { toast(erroAuth(err)); btn.disabled = false; }
   };
@@ -1286,7 +1399,7 @@ async function obterPerfil(user) {
   if (!snap.exists) {
     const extra = JSON.parse(sessionStorage.getItem('bou.cad') || '{}');
     const souAdmin = (user.email || '').toLowerCase() === ADMIN_EMAIL;
-    const novo = { email: user.email, grad: extra.grad || '', nome: extra.nome || '', rg: extra.rg || '', opm: extra.opm || '', criado: Date.now(), status: souAdmin ? 'ativo' : 'pendente', perms: { ...PERMS_PADRAO, admin: souAdmin } };
+    const novo = { email: user.email, grad: extra.grad || '', nome: extra.nome || '', rg: extra.rg || '', opm: extra.opm || '', convite: extra.convite || '', turma: extra.turma || '', criado: Date.now(), status: souAdmin ? 'ativo' : 'pendente', perms: { ...PERMS_PADRAO, admin: souAdmin } };
     await ref.set(novo);
     sessionStorage.removeItem('bou.cad');
     LS.set(cacheK, novo);
@@ -1309,6 +1422,266 @@ async function iniciarSessao(user) {
   await exigirDesbloqueio();
   rota();
   mostrarNovidades();
+  vigiarPedidos();
+}
+
+
+/* ======================= v5: validação, revisor, voz, placa, compartilhar ======================= */
+function cpfValido(c) {
+  c = String(c).replace(/\D/g, ''); if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  const dv = n => { let s = 0; for (let i = 0; i < n; i++) s += Number(c[i]) * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+  return dv(9) === Number(c[9]) && dv(10) === Number(c[10]);
+}
+const normPlaca = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const placaValida = p => /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(normPlaca(p));
+const fmtPlaca = p => { p = normPlaca(p); return /^[A-Z]{3}\d{4}$/.test(p) ? p.slice(0, 3) + '-' + p.slice(3) : p; };
+const ehCampoPlaca = c => c && (c.id === 'placa' || /placa/i.test(c.l || ''));
+const ehCampoFone = c => c && /telefone|\bfone\b|whatsapp/i.test((c.l || '') + ' ' + c.id) && !/golpista/i.test(c.id);
+function validarCampo(c, v) {
+  v = String(v || '').trim(); if (!v || !c) return '';
+  const msgs = [];
+  if (/\bcpf\b/i.test(c.id + ' ' + (c.l || '')) && !/[a-z]{3}/i.test(v.replace(/cpf/ig, ''))) { const d = v.replace(/\D/g, ''); if (d.length !== 11) msgs.push('CPF deve ter 11 números'); else if (!cpfValido(d)) msgs.push('CPF inválido (dígito verificador não confere)'); }
+  else if (!ehCampoFone(c)) {
+    const vist = new Set();
+    [...(v.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g) || []), ...[...v.matchAll(/cpf\s*(?:n[ºo°.]*)?\s*:?\s*([\d.\-]{11,14})/ig)].map(m => m[1])].forEach(x => { const d = x.replace(/\D/g, ''); if (vist.has(d)) return; vist.add(d); if (d.length !== 11 || !cpfValido(d)) msgs.push(`CPF ${x} inválido`); });
+  }
+  if (c.id === 'placa') { if (!placaValida(v)) msgs.push('Placa fora do padrão (ABC-1234 ou Mercosul ABC1D23)'); }
+  else if (ehCampoPlaca(c)) { const m = v.match(/placa\s*:?\s*([A-Za-z0-9-]{5,9})/i); if (m && !placaValida(m[1])) msgs.push(`Placa "${m[1]}" fora do padrão (ABC-1234 ou ABC1D23)`); }
+  if (ehCampoFone(c)) {
+    const nums = v.match(/\(?\d{2}\)?[\s-]?\d{4,5}[\s-]?\d{4}|\b\d{4,5}-?\d{4}\b/g) || [];
+    nums.forEach(x => { const d = x.replace(/\D/g, ''); if (/^0800/.test(d)) return; if (d.length < 10) msgs.push(`Telefone ${x} sem DDD`); else if (d.length === 11 && d[2] !== '9') msgs.push(`Celular ${x}: o 3º dígito deveria ser 9`); });
+    if (!nums.length && /\d{5,}/.test(v) && !/\b1\d{2}\b/.test(v)) msgs.push('Telefone incompleto — use (DDD) número');
+  }
+  return msgs.join(' • ');
+}
+function campoDef(scope, k) {
+  const lista = scope === 'd' ? [...GERAIS, ...((T && T.campos) || []), { id: 'obs', l: 'Texto livre', t: 'area' }] : ((MODULOS[((R && R.mods[Number(scope.slice(1))]) || {}).tipo] || { campos: [] }).campos);
+  return lista.find(c => c.id === k);
+}
+
+/* Revisor: semáforo antes de copiar */
+const TERMOS_EVITAR = [
+  [/\bmeliantes?\b/i, '"meliante" — use "autor", "suspeito" ou "abordado"'],
+  [/\b(o|um|os|dois|três|tal|do|dos|ao|aos|pelo|pelos)\s+elementos?\b(?!\s+(objetivos?|de\s+muni|concretos?|colhidos?|probat))/i, '"elemento" para pessoa — use "autor", "suspeito" ou "abordado"'],
+  [/\b(vagabundos?|bandidos?|marginais?|delinquentes?|drogados?|nóias?|noias?)\b/i, 'termo pejorativo — descreva a pessoa de forma neutra'],
+  [/\batitude\s+suspeita\b/i, '"atitude suspeita" genérica — descreva o comportamento concreto observado (STJ, RHC 158.580)'],
+  [/\btirocínio\b/i, '"tirocínio policial" sozinho não justifica abordagem (STJ, Teses ed. 236)'],
+  [/\bmenor(es)?\b(?!\s+(potencial|que|do\s+que|valor|tempo|dist|quantidade|parte|gravidade|lesivo|ofensivo|prazo|risco|porte))/i, '"menor" — o ECA usa "criança" ou "adolescente"'],
+  [/\bmoradora?\s+de\s+rua\b/i, 'prefira "pessoa em situação de rua"'],
+  [/\b(evidentemente|obviamente|claramente\s+culpad|com\s+certeza\s+(era|foi))/i, 'juízo de valor — registre só o que foi constatado'],
+];
+const TL_ORDEM = [['hora', 'Acionamento'], ['horaChegada', 'Chegada ao local'], ['hSaida', 'Saída para a DP'], ['hDP', 'Apresentação na DP'], ['hFim', 'Encerramento']];
+function minutos(h) { const m = /^(\d{1,2}):(\d{2})/.exec(h || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
+function errosHorario(d) {
+  const it = TL_ORDEM.map(([k, l]) => ({ k, l, m: minutos(d[k]), h: d[k] })).filter(x => x.m != null);
+  const out = [];
+  for (let i = 1; i < it.length; i++) { const dif = it[i].m - it[i - 1].m; if (dif < 0 && dif > -12 * 60) out.push(`${it[i].l} (${it[i].h}) está antes de ${it[i - 1].l.toLowerCase()} (${it[i - 1].h})`); }
+  return out;
+}
+function termosEvitar(txt) { return TERMOS_EVITAR.filter(([re]) => re.test(txt)).map(([, msg]) => msg); }
+function revisar() {
+  const out = [];
+  const txt = textoFinal();
+  const lac = R.editado == null ? (gerarTexto(T, R).match(/⟦/g) || []).length : (txt.match(/\[[^\]]+\]/g) || []).length;
+  if (lac) out.push({ n: 'warn', t: `${lac} lacuna(s) [entre colchetes] no texto` });
+  checklist(T, R).filter(x => !x.feito).forEach(x => out.push({ n: x.auto === false ? 'red' : 'warn', t: (x.auto === false ? 'Indispensável: ' : 'Conferir: ') + x.t }));
+  errosHorario(R.d).forEach(t => out.push({ n: 'red', t: 'Horário incoerente: ' + t }));
+  termosEvitar(txt).forEach(t => out.push({ n: 'warn', t: 'Termo a evitar: ' + t }));
+  (R.mods || []).forEach(x => { const M = MODULOS[x.tipo]; if (M && M.avisos) M.avisos(visiveis(x.m, M.campos)).forEach(a => out.push({ n: a.n === 'red' ? 'red' : 'warn', t: `${M.nome}: ${a.t}` })); });
+  const tem = t => (R.mods || []).some(x => x.tipo === t);
+  if (/busca\s+pessoal|revista\s+pessoal|foi\s+revistad/i.test(txt) && !tem('busca')) out.push({ n: 'red', t: 'O texto cita busca pessoal, mas o bloco "Busca pessoal" não foi anexado: registre a fundada suspeita (elementos objetivos ANTERIORES à busca — art. 244 CPP)' });
+  if (/ingress|adentr|entrou\s+na\s+resid|entrada\s+na\s+resid/i.test(txt) && !tem('domicilio') && !/não\s+(houve|foi)\s+(ingresso|necess)/i.test(txt)) out.push({ n: 'warn', t: 'O texto indica entrada em imóvel: anexe o bloco "Ingresso em domicílio" para registrar o fundamento (CF art. 5º, XI)' });
+  Object.entries(R.d).forEach(([k, v]) => { const c = campoDef('d', k); if (c && typeof v === 'string') { const m = validarCampo(c, v); if (m) out.push({ n: 'warn', t: `${c.l}: ${m}` }); } });
+  (R.mods || []).forEach((x, i) => Object.entries(x.m).forEach(([k, v]) => { const c = campoDef('m' + i, k); if (c && typeof v === 'string') { const m = validarCampo(c, v); if (m) out.push({ n: 'warn', t: `${c.l}: ${m}` }); } }));
+  return out.sort((a, b) => (a.n === 'red' ? 0 : 1) - (b.n === 'red' ? 0 : 1));
+}
+function revisorHTML(lst) {
+  const red = lst.filter(x => x.n === 'red').length, warn = lst.length - red;
+  const cor = red ? 'red' : warn ? 'warn' : 'okb';
+  const tit = red ? `🔴 ${red} problema(s) a corrigir${warn ? ` • ${warn} aviso(s)` : ''}` : warn ? `🟡 ${warn} aviso(s) para conferir` : '🟢 Revisão automática sem problemas';
+  return `<details class="rev ${cor}"><summary>${tit}</summary>${lst.length ? `<ul>${lst.map(x => `<li class="${x.n}">${x.n === 'red' ? '⛔' : '⚠'} ${esc(x.t)}</li>`).join('')}</ul>` : '<p class="sumhint">Sem lacunas, horários coerentes e nenhum termo a evitar. Ainda assim, releia antes de lançar.</p>'}</details>`;
+}
+
+/* Ditado por voz em qualquer campo de texto (botão flutuante) */
+let campoVoz = null, recVoz = null;
+const SEL_VOZ = 'input[type=text][data-k], textarea[data-k], #envNome, textarea#manual, #simTxt';
+function micFlutuante() {
+  let b = $('#micf');
+  if (!b) {
+    b = document.createElement('button'); b.id = 'micf'; b.type = 'button'; b.className = 'micf'; b.textContent = '🎤'; b.title = 'Ditar no campo';
+    b.addEventListener('pointerdown', e => e.preventDefault());
+    b.onclick = () => ditarCampo(campoVoz);
+    document.body.appendChild(b);
+  }
+  return b;
+}
+if (temVoz) {
+  document.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(SEL_VOZ)) { campoVoz = e.target; micFlutuante().classList.add('show'); } });
+  document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!recVoz && !(a && a.matches && a.matches(SEL_VOZ))) { const b = $('#micf'); if (b) b.classList.remove('show'); } }, 200));
+}
+function ditarCampo(el) {
+  if (recVoz) { recVoz.stop(); return; }
+  if (!el || !document.body.contains(el)) { toast('Toque no campo onde quer ditar'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR(); rec.lang = 'pt-BR'; rec.interimResults = false; rec.continuous = true; recVoz = rec;
+  const b = micFlutuante(); b.classList.add('rec'); b.textContent = '⏹';
+  const sel = el.dataset && el.dataset.k ? `[data-s="${el.dataset.s}"][data-k="${el.dataset.k}"]` : '#' + el.id;
+  rec.onresult = ev => {
+    let t = ''; for (let i = ev.resultIndex; i < ev.results.length; i++) if (ev.results[i].isFinal) t += ev.results[i][0].transcript;
+    t = t.trim(); if (!t) return;
+    const alvo = document.querySelector(sel) || el;
+    alvo.value = (alvo.value.trim() ? alvo.value.trim() + ' ' : '') + t;
+    alvo.dispatchEvent(new Event('input', { bubbles: true })); alvo.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  rec.onerror = e => { if (e.error === 'not-allowed') toast('Permita o microfone para ditar'); else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Não entendi — tente de novo'); };
+  rec.onend = () => { recVoz = null; b.classList.remove('rec'); b.textContent = '🎤'; const a = document.activeElement; if (!(a && a.matches && a.matches(SEL_VOZ))) b.classList.remove('show'); };
+  try { rec.start(); toast('Fale agora — toque ⏹ para parar'); } catch { recVoz = null; }
+}
+
+/* Leitura de placa pela câmera (Tesseract.js no aparelho, mesmo método do app do portão) */
+const TESS_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+const PL_L2D = { O: '0', Q: '0', D: '0', U: '0', I: '1', L: '1', J: '1', Z: '2', S: '5', B: '8', G: '6', T: '7', A: '4' };
+const PL_D2L = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B', '6': 'G', '7': 'T', '4': 'A' };
+function extrairPlacas(text) {
+  const t = String(text || '').toUpperCase().replace(/BRASIL|BRAZIL|MERCOSUL|MERCOSUR|\bBR\b/g, ' ').replace(/[^A-Z0-9]/g, '');
+  const out = [], vistos = new Set();
+  for (let i = 0; i + 7 <= t.length; i++) {
+    let c = 0, o = '', ok = true;
+    for (let j = 0; j < 7; j++) {
+      let ch = t[i + j]; const L = j < 3, N = j === 3 || j > 4;
+      if (L && /\d/.test(ch)) { if (PL_D2L[ch]) { ch = PL_D2L[ch]; c++; } else { ok = false; break; } }
+      else if (N && /[A-Z]/.test(ch)) { if (PL_L2D[ch]) { ch = PL_L2D[ch]; c++; } else { ok = false; break; } }
+      o += ch;
+    }
+    if (ok && c <= 2 && placaValida(o) && !vistos.has(o)) { vistos.add(o); out.push({ p: o, c }); }
+  }
+  return out.sort((a, b) => a.c - b.c);
+}
+function carregarJS(src, global) {
+  return new Promise((ok, erro) => {
+    if (window[global]) return ok();
+    let s = document.querySelector(`script[src="${src}"]`);
+    if (!s) { s = document.createElement('script'); s.src = src; document.head.appendChild(s); }
+    s.addEventListener('load', () => ok()); s.addEventListener('error', () => erro(new Error('Sem internet para carregar o leitor')));
+  });
+}
+let tessWorker = null;
+async function workerPlaca() {
+  if (tessWorker) return tessWorker;
+  await carregarJS(TESS_CDN, 'Tesseract');
+  tessWorker = await Tesseract.createWorker('eng', 1);
+  await tessWorker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', tessedit_pageseg_mode: '7' });
+  return tessWorker;
+}
+function contrastar(c) {
+  const ctx = c.getContext('2d', { willReadFrequently: true }); const d = ctx.getImageData(0, 0, c.width, c.height), a = d.data;
+  let lo = 255, hi = 0; for (let i = 0; i < a.length; i += 4) { const g = (a[i] * .299 + a[i + 1] * .587 + a[i + 2] * .114) | 0; a[i] = g; if (g < lo) lo = g; if (g > hi) hi = g; }
+  const r = Math.max(1, hi - lo); for (let i = 0; i < a.length; i += 4) { const v = (a[i] - lo) * 255 / r; a[i] = a[i + 1] = a[i + 2] = v; }
+  ctx.putImageData(d, 0, 0); return c;
+}
+function lerPlaca() {
+  return new Promise(resolve => {
+    const ov = document.createElement('div'); ov.className = 'dlg camdlg';
+    ov.innerHTML = `<div class="dlgbox"><p><b>📷 Ler placa</b></p><div class="camwrap"><video playsinline muted></video><div class="guia"></div></div><div class="sumhint" id="plSt">Abrindo a câmera…</div>
+      <div class="actions"><button class="btn" data-r="x">Cancelar</button><label class="btn">🖼️ Foto<input type="file" accept="image/*" capture="environment" hidden></label><button class="btn pri" data-r="ok" hidden>Usar</button></div></div>`;
+    document.body.appendChild(ov);
+    const v = ov.querySelector('video'), st = ov.querySelector('#plSt'), bOk = ov.querySelector('[data-r=ok]');
+    let stream = null, vivo = true, melhor = null; const votos = {};
+    const fim = p => { vivo = false; if (stream) stream.getTracks().forEach(t => t.stop()); ov.remove(); resolve(p || null); };
+    ov.querySelector('[data-r=x]').onclick = () => fim(null);
+    bOk.onclick = () => fim(melhor);
+    const reconhecer = async (canvas) => { const w = await workerPlaca(); const { data } = await w.recognize(contrastar(canvas)); return extrairPlacas(data.text); };
+    ov.querySelector('input[type=file]').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return; st.textContent = 'Lendo a foto…';
+      try {
+        const im = await createImageBitmap(f); const s = Math.min(1, 1600 / Math.max(im.width, im.height));
+        const c = document.createElement('canvas'); c.width = im.width * s; c.height = im.height * s; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        const w = await workerPlaca(); await w.setParameters({ tessedit_pageseg_mode: '11' });
+        const { data } = await w.recognize(contrastar(c)); await w.setParameters({ tessedit_pageseg_mode: '7' });
+        const cs = extrairPlacas(data.text);
+        if (cs.length) { melhor = cs[0].p; st.innerHTML = `Placa encontrada: <b>${fmtPlaca(melhor)}</b>`; bOk.hidden = false; } else st.textContent = 'Nenhuma placa encontrada na foto. Tente mais perto.';
+      } catch (err) { st.textContent = err.message; }
+    };
+    (async () => {
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false }); }
+      catch { st.textContent = 'Câmera indisponível — use "Foto".'; return; }
+      v.srcObject = stream; await v.play().catch(() => {});
+      st.textContent = 'Carregando o leitor (só demora na 1ª vez)…';
+      try { await workerPlaca(); } catch (e) { st.textContent = e.message; return; }
+      st.textContent = 'Enquadre a placa no retângulo';
+      while (vivo) {
+        try {
+          const vw = v.videoWidth, vh = v.videoHeight;
+          if (vw) {
+            const g = ov.querySelector('.guia').getBoundingClientRect(), r = v.getBoundingClientRect(), sc = Math.max(r.width / vw, r.height / vh);
+            const ox = (r.width - vw * sc) / 2, oy = (r.height - vh * sc) / 2;
+            const sx = Math.max(0, (g.left - r.left - ox) / sc), sy = Math.max(0, (g.top - r.top - oy) / sc), sw = Math.min(vw - sx, g.width / sc), sh = Math.min(vh - sy, g.height / sc);
+            const c = document.createElement('canvas'); c.width = 800; c.height = Math.round(800 * sh / sw);
+            c.getContext('2d', { willReadFrequently: true }).drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+            const cs = await reconhecer(c);
+            cs.slice(0, 2).forEach(x => { votos[x.p] = (votos[x.p] || 0) + (x.c === 0 ? 2 : 1); });
+            const top = Object.entries(votos).sort((a, b) => b[1] - a[1])[0];
+            if (top && vivo) { melhor = top[0]; bOk.hidden = false; st.innerHTML = `Lendo: <b>${fmtPlaca(melhor)}</b> ${'●'.repeat(Math.min(5, top[1]))}`; if (top[1] >= 5) { fim(melhor); return; } }
+          }
+        } catch { /* quadro perdido */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
+    })();
+  });
+}
+async function placaNoCampo(scope, k) {
+  const p = await lerPlaca(); if (!p) return;
+  const o = scope === 'd' ? R.d : R.mods[Number(scope.slice(1))].m;
+  const f = fmtPlaca(p);
+  if (k === 'placa') o[k] = f;
+  else { const atual = String(o[k] || ''); const re = /placa\s*:?\s*[A-Za-z0-9-]{5,9}/i; o[k] = re.test(atual) ? atual.replace(re, 'placa ' + f) : (atual.trim() ? atual.trim() + ', placa ' + f : 'placa ' + f); }
+  toast('Placa ' + f + ' registrada — confira'); agendarSalvar(); rerender();
+}
+
+/* Imprimir / PDF e WhatsApp */
+function imprimir(titulo, corpoHTML) {
+  const fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr);
+  const d = fr.contentDocument;
+  d.open(); d.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>body{font:12pt/1.5 Arial,sans-serif;margin:18mm;color:#111}h1{font-size:15pt;margin:0 0 4px}.m{color:#555;font-size:10pt;margin-bottom:14px;border-bottom:1px solid #999;padding-bottom:8px}pre{white-space:pre-wrap;font:inherit}table{border-collapse:collapse;width:100%;font-size:11pt}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#eee}.r{text-align:right}.rod{margin-top:18px;font-size:9pt;color:#666}</style></head><body>${corpoHTML}</body></html>`); d.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { toast('Impressão indisponível neste navegador'); } setTimeout(() => fr.remove(), 60000); }, 300);
+}
+function pdfDescricao() {
+  const d = R.d, eq = turno();
+  imprimir(`BOU - ${T.nome}`, `<h1>Descrição sumária — ${esc(T.nome)}</h1><div class="m">${esc([fmtData(d.data) + ' ' + (d.hora || ''), [d.logradouro, d.numero, d.bairro, d.municipio].filter(Boolean).join(', '), d.vtr ? 'VTR ' + d.vtr : '', d.equipe || eq.equipe].filter(x => x && x.trim()).join(' • '))}</div><pre>${esc(textoFinal())}</pre><div class="rod">Rascunho gerado no Descritivo BOU em ${new Date().toLocaleString('pt-BR')}. Documento de apoio: o registro oficial é o BOU. Contém dados pessoais — descarte com segurança.</div>`);
+}
+async function whatsDescricao() {
+  if (!await confirmar('<p>O texto contém dados pessoais de envolvidos.</p><p>Envie só para quem precisa (Oficial, Delegado, equipe) e apague a conversa depois de lançar o BOU.</p>', 'Abrir WhatsApp', true)) return;
+  window.open('https://wa.me/?text=' + encodeURIComponent(`*${T.nome}* — descrição sumária\n\n${textoFinal()}`), '_blank');
+}
+
+/* Aviso ao administrador: novos pedidos de acesso */
+let pendUnsub = null, pendIds = null;
+function vigiarPedidos() {
+  if (!TEM_FIREBASE || !ehAdmin() || pendUnsub) return;
+  pendUnsub = db.collection('usuarios').where('status', '==', 'pendente').onSnapshot(sn => {
+    const ids = sn.docs.map(x => x.id), novos = pendIds ? sn.docs.filter(x => !pendIds.includes(x.id)) : [];
+    pendIds = ids; LS.set('bou.pendN', ids.length); marcarPendNav();
+    novos.forEach(x => { const u = x.data(); const msg = `${[ABREV[u.grad] || u.grad, u.nome].filter(Boolean).join(' ') || u.email} pediu acesso${u.turma ? ' (' + u.turma + ')' : ''}`; toast('🔔 ' + msg); avisoSistema('Novo pedido de acesso', msg); });
+  }, () => {});
+}
+function marcarPendNav() { const a = document.querySelector('#nav [data-n="admin"]'); if (!a) return; const n = Number(LS.get('bou.pendN', 0)) || 0; let s = a.querySelector('.nb'); if (!s) { s = document.createElement('i'); s.className = 'nb'; a.appendChild(s); } s.textContent = n; s.hidden = !n; }
+async function avisoSistema(titulo, corpo) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try { const r = await navigator.serviceWorker.getRegistration(); if (r) r.showNotification(titulo, { body: corpo, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'pedido-' + Date.now() }); else new Notification(titulo, { body: corpo }); } catch { /* sem suporte */ }
+}
+
+/* Convites */
+function gerarCodigo() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint8Array(6)); return [...r].map(x => a[x % a.length]).join(''); }
+const linkConvite = cod => `${location.origin}${location.pathname}?convite=${cod}`;
+
+/* Simulado: comparar a redação do aluno */
+function compararRedacao(sim, txt) {
+  const n = norm(txt);
+  const itens = (sim.redacao && sim.redacao.itens) || [];
+  const res = itens.map(it => ({ t: it.t, ok: it.k.some(k => new RegExp(norm(k), 'i').test(n)) }));
+  if (!/\b\d{1,2}\s?(h|:)\s?\d{0,2}|horas?\b/.test(n)) res.push({ t: 'Horários (acionamento, chegada, encerramento)', ok: false });
+  else res.push({ t: 'Horários (acionamento, chegada, encerramento)', ok: true });
+  return { res, termos: termosEvitar(txt) };
 }
 
 /* ------------------------- roteador ------------------------- */
@@ -1344,7 +1717,7 @@ if (TEM_FIREBASE) {
   firebase.initializeApp(CFG);
   auth = firebase.auth(); db = firebase.firestore();
   try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch {}
-  auth.onAuthStateChanged(u => { if (u) iniciarSessao(u); else { usuario = null; perfil = null; TIPOS = []; telaLogin(); } });
+  auth.onAuthStateChanged(u => { if (u) iniciarSessao(u); else { usuario = null; perfil = null; TIPOS = []; telaLogin(new URLSearchParams(location.search).get('convite') ? 'cadastro' : 'entrar'); } });
 } else {
   // modo local de testes: sem Firebase configurado, lê ./conteudo/*.js se existir
   perfil = { nome: 'Modo local', status: 'ativo', perms: { ...PERMS_PADRAO } };
